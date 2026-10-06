@@ -45,6 +45,7 @@ def generate_excel_template():
         for nazwa in wybrani:
             lektorzy_data.append({
                 "Lektor": nazwa,
+                "Zadeklarowana liczba grup": random.randint(2, 6),
                 "Dostępność Pon": random.choice(godziny_lek),
                 "Dostępność Wt": random.choice(godziny_lek),
                 "Dostępność Śr": random.choice(godziny_lek),
@@ -186,9 +187,9 @@ def score_combo(combo):
     if len(combo) == 1: return 1
     if len(combo) == 2:
         diff = abs(dni_short.index(combo[0]) - dni_short.index(combo[1]))
-        if diff in [2, 4]: return 1
-        elif diff == 3: return 2
-        elif diff == 1: return 3
+        if diff in [2, 4]: return 1  # Pon-Śr, Wt-Czw, Śr-Pt, Pon-Pt
+        elif diff == 3: return 2     # Pon-Czw, Wt-Pt
+        elif diff == 1: return 3     # Dzień po dniu (bardzo nie lubiane)
         return 10
     return 1
 
@@ -200,38 +201,22 @@ def get_scored_combos(avail_dict, spotkan):
     scored.sort(key=lambda x: x[1]) 
     return [x[0] for x in scored]
 
-def check_lektor(lek, d, st_m, en_m, grafik, gap):
-    can_work = any(b_s <= st_m and b_e >= en_m for (b_s, b_e) in lek["Avail"][d])
-    if not can_work: return False
-    
-    zajety = any(
-        g["Lektor"] == lek["Lektor"] and g["Dzień"] == d and 
-        is_overlap(st_m, en_m, g["Start"], g["End"], gap) 
-        for g in grafik
-    )
-    return not zajety
-
-def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap):
-    dostepne = [
-        s["Sala"] for s in sale_dane 
-        if s["Filia"] == filia and 
-        (poziom in s["Poziomy"] or "Wszystkie" in s["Poziomy"])
+def get_color_map(unique_vals):
+    colors = [
+        "#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", 
+        "#a0c4ff", "#bdb2ff", "#ffc6ff", "#fbb1bd", "#e2ece9",
+        "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4",
+        "#fbc4ab", "#f08080", "#84a59d", "#f6bd60", "#f7ede2"
     ]
-    for s in dostepne:
-        zajeta = any(
-            g["Sala"] == s and g["Dzień"] == d and g["Filia"] == filia and 
-            is_overlap(st_m, en_m, g["Start"], g["End"], gap) 
-            for g in grafik
-        )
-        if not zajeta: return s
-    return None
-
-colors_pool = [
-    "#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", 
-    "#a0c4ff", "#bdb2ff", "#ffc6ff", "#fbb1bd", "#e2ece9",
-    "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4",
-    "#fbc4ab", "#f08080", "#84a59d", "#f6bd60", "#f7ede2"
-]
+    cmap = {}
+    idx = 0
+    for val in unique_vals:
+        if val == "-" or pd.isna(val): 
+            cmap[val] = ""
+        else: 
+            cmap[val] = f"background-color: {colors[idx % len(colors)]}; color: #000000; font-weight: bold;"
+            idx += 1
+    return cmap
 
 def style_cell_with_cmap(val, cmap):
     if val == "-" or pd.isna(val): return ""
@@ -244,7 +229,7 @@ def style_cell_with_cmap(val, cmap):
 # INTERFEJS GŁÓWNY
 # ==========================================
 st.subheader("1. Pobierz szablon")
-st.download_button("📥 Pobierz układacz", data=generate_excel_template(), file_name="ukladacz.xlsx")
+st.download_button("📥 Pobierz układacz (Excel)", data=generate_excel_template(), file_name="ukladacz.xlsx")
 
 st.subheader("2. Wgraj uzupełniony plik")
 uploaded_file = st.file_uploader("Wgraj plik Excel", type=["xlsx"])
@@ -252,6 +237,9 @@ uploaded_file = st.file_uploader("Wgraj plik Excel", type=["xlsx"])
 if uploaded_file is not None:
     xls = pd.ExcelFile(uploaded_file)
     df_lektorzy = pd.read_excel(xls, "Lektorzy")
+    if "Zadeklarowana liczba grup" not in df_lektorzy.columns:
+        df_lektorzy.insert(1, "Zadeklarowana liczba grup", 100)
+        
     df_sale = pd.read_excel(xls, "Sale")
     df_trasy = pd.read_excel(xls, "Trasy")
     df_opiekunki = pd.read_excel(xls, "Opiekunki") if "Opiekunki" in xls.sheet_names else pd.DataFrame()
@@ -332,11 +320,16 @@ if uploaded_file is not None:
     edyt_starsi = st.data_editor(df_aktywne, use_container_width=True, num_rows="dynamic", key="e_st")
 
     # ==========================================
-    # KROK 2: GRAFIK
+    # KROK 2: GRAFIK (W SESSION_STATE ABY NIE ZNIKAŁO)
     # ==========================================
     st.markdown("---")
+    st.header("Krok 2: Automatyczne Układanie Grafiku")
+    
+    if "wygenerowano" not in st.session_state:
+        st.session_state.wygenerowano = False
+        
     if st.button("🚀 Wygeneruj Grafik", type="primary"):
-        with st.spinner("Przeszukuję okna i zasoby..."):
+        with st.spinner("Przeszukuję okna, zasoby i przerwy..."):
             grafik, grafik_op, nieprzypisane = [], [], []
             
             czas_tras = {f"{r['Początek']}_{r['Koniec']}": r["Czas (min)"] for _, r in df_trasy.iterrows()}
@@ -348,7 +341,12 @@ if uploaded_file is not None:
                     
                 l_filie = [f.strip() for f in str(r["Filie"]).split(",")] if pd.notna(r["Filie"]) else []
                 avail = {dni_short[i]: parse_availability(r.get(f"Dostępność {dni_short[i]}", "")) for i in range(5)}
-                lektorzy_dane.append({"Lektor": r["Lektor"], "Poziomy": l_poziomy, "Filie": l_filie, "Avail": avail})
+                
+                limit = int(r.get("Zadeklarowana liczba grup", 100))
+                lektorzy_dane.append({
+                    "Lektor": r["Lektor"], "Poziomy": l_poziomy, "Filie": l_filie, 
+                    "Avail": avail, "Limit": limit
+                })
                 
             opiekunki_dane = []
             if not df_opiekunki.empty:
@@ -385,13 +383,26 @@ if uploaded_file is not None:
                 
             zadania.sort(key=lambda x: (len(x["Windows"]), -x["Czas"]))
             
+            # Słownik do śledzenia przydziałów grup dla nauczycieli
+            przypisane_grupy_lektora = {l["Lektor"]: set() for l in lektorzy_dane}
+            
             for zad in zadania:
                 combos = get_scored_combos(zad["Windows"], zad["Spotkań"])
                 znaleziono = False
+                
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
+                
+                # Sortowanie lektorów: 
+                # 1. Preferuj tych PONIŻEJ limitu (False jest przed True)
+                # 2. Równomiernie rozkładaj obciążenie (rosnąco wg przypisanych)
+                valid_leks.sort(key=lambda l: (
+                    len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit"],
+                    len(przypisane_grupy_lektora[l["Lektor"]])
+                ))
+                
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
-                # DWUETAPOWY START: Najpierw 10 min przerwy, potem 5 min przerwy
+                # DWUETAPOWY START: Najpierw 10 min przerwy, potem 5 min
                 for gap_pref in [10, 5]:
                     if znaleziono: break
                     
@@ -457,70 +468,79 @@ if uploaded_file is not None:
                                 
                             if len(zaplanowane_dni) == len(combo):
                                 grafik.extend(zaplanowane_dni)
+                                przypisane_grupy_lektora[lek["Lektor"]].add(zad["Grupa"])
                                 znaleziono = True
                                 break 
                 
                 if not znaleziono:
-                    nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak wspólnego zasobu na dopasowane bloki"})
+                    nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak wspólnego zasobu (Lektor/Sala) z wymaganą przerwą"})
 
-            # ==========================================
-            # WIZUALIZACJA
-            # ==========================================
-            if nieprzypisane:
-                st.error(f"🔴 Konflikty grafiku! ({len(nieprzypisane)} grup wylądowało w poczekalni).")
-                st.dataframe(pd.DataFrame(nieprzypisane), use_container_width=True)
-            else:
-                st.success("🎉 Sukces! Przypisano wszystkie grupy!")
+            st.session_state.grafik = grafik
+            st.session_state.nieprzypisane = nieprzypisane
+            st.session_state.wygenerowano = True
+
+    # ==========================================
+    # WIZUALIZACJA (ŁADOWANA Z PAMIĘCI SESSION_STATE)
+    # ==========================================
+    if st.session_state.get("wygenerowano", False):
+        grafik = st.session_state.grafik
+        nieprzypisane = st.session_state.nieprzypisane
+        
+        if nieprzypisane:
+            st.error(f"🔴 Konflikty grafiku! ({len(nieprzypisane)} grup wylądowało w poczekalni).")
+            st.dataframe(pd.DataFrame(nieprzypisane), use_container_width=True)
+        else:
+            st.success("🎉 Sukces! Przypisano wszystkie grupy zachowując limity lektorów i przerwy!")
+            
+        st.subheader("Wizualizacja Grafiku")
+        
+        widok_opcja = st.radio("Perspektywa:", ["Według Filii (Zarządzanie salami)", "Według Lektorów (Indywidualnie)"], horizontal=True)
+        df_grafik = pd.DataFrame(grafik)
+        
+        if widok_opcja == "Według Filii (Zarządzanie salami)":
+            tabs = st.tabs(filie_unikalne)
+            for idx, tab in enumerate(tabs):
+                f_nazwa = filie_unikalne[idx]
+                with tab:
+                    if not df_grafik.empty:
+                        df_f = df_grafik[df_grafik["Filia"] == f_nazwa].copy()
+                        if not df_f.empty:
+                            df_f["Godzina"] = df_f["Start"].apply(mins_to_time) + " - " + df_f["End"].apply(mins_to_time)
+                            df_f["Wpis"] = df_f["Grupa"] + " (" + df_f["Lektor"] + ")" + df_f["Op_Str"]
+                            df_f["Dzień"] = pd.Categorical(df_f["Dzień"], categories=dni_short, ordered=True)
+                            
+                            pivot = df_f.pivot_table(index=["Godzina"], columns=["Dzień", "Sala"], values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
+                            
+                            # Kolorowanie per lektor wewnątrz danej filii
+                            uniq_leks = df_f["Lektor"].unique()
+                            cmap = {lek: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, lek in enumerate(uniq_leks)}
+                            
+                            try: styled = pivot.style.map(lambda x: style_cell_with_cmap(x, cmap))
+                            except: styled = pivot.style.applymap(lambda x: style_cell_with_cmap(x, cmap))
+                            
+                            st.dataframe(styled, use_container_width=True)
+                        else: st.info(f"Brak zajęć dla {f_nazwa}.")
+                    else: st.info("Grafik pusty.")
+                    
+        else:
+            if not df_grafik.empty:
+                lektorzy_z_grafiku = sorted(df_grafik["Lektor"].unique())
+                wybrany_lek = st.selectbox("Wybierz lektora do podglądu:", lektorzy_z_grafiku)
                 
-            st.subheader("Wizualizacja Grafiku")
-            
-            widok_opcja = st.radio("Perspektywa:", ["Według Filii (Zarządzanie salami)", "Według Lektorów (Indywidualnie)"], horizontal=True)
-            df_grafik = pd.DataFrame(grafik)
-            
-            if widok_opcja == "Według Filii (Zarządzanie salami)":
-                tabs = st.tabs(filie_unikalne)
-                for idx, tab in enumerate(tabs):
-                    f_nazwa = filie_unikalne[idx]
-                    with tab:
-                        if not df_grafik.empty:
-                            df_f = df_grafik[df_grafik["Filia"] == f_nazwa].copy()
-                            if not df_f.empty:
-                                df_f["Godzina"] = df_f["Start"].apply(mins_to_time) + " - " + df_f["End"].apply(mins_to_time)
-                                df_f["Wpis"] = df_f["Grupa"] + " (" + df_f["Lektor"] + ")" + df_f["Op_Str"]
-                                df_f["Dzień"] = pd.Categorical(df_f["Dzień"], categories=dni_short, ordered=True)
-                                
-                                pivot = df_f.pivot_table(index=["Godzina"], columns=["Dzień", "Sala"], values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
-                                
-                                # Kolorowanie per lektor wewnątrz danej filii
-                                uniq_leks = df_f["Lektor"].unique()
-                                cmap = {lek: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, lek in enumerate(uniq_leks)}
-                                
-                                try: styled = pivot.style.map(lambda x: style_cell_with_cmap(x, cmap))
-                                except: styled = pivot.style.applymap(lambda x: style_cell_with_cmap(x, cmap))
-                                
-                                st.dataframe(styled, use_container_width=True)
-                            else: st.info(f"Brak zajęć dla {f_nazwa}.")
-                        else: st.info("Grafik pusty.")
-                        
+                df_lek = df_grafik[df_grafik["Lektor"] == wybrany_lek].copy()
+                df_lek["Godzina"] = df_lek["Start"].apply(mins_to_time) + " - " + df_lek["End"].apply(mins_to_time)
+                df_lek["Wpis"] = df_lek["Grupa"] + "\n📍 " + df_lek["Filia"] + " (Sala " + df_lek["Sala"] + ")"
+                df_lek["Dzień"] = pd.Categorical(df_lek["Dzień"], categories=dni_short, ordered=True)
+                
+                pivot_lek = df_lek.pivot_table(index=["Godzina"], columns="Dzień", values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
+                
+                # Kolorowanie po grupie w widoku Lektora
+                uniq_g = df_lek["Grupa"].unique()
+                cmap_l = {g: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, g in enumerate(uniq_g)}
+                
+                try: styled_lek = pivot_lek.style.map(lambda x: style_cell_with_cmap(x, cmap_l))
+                except: styled_lek = pivot_lek.style.applymap(lambda x: style_cell_with_cmap(x, cmap_l))
+                
+                st.dataframe(styled_lek, use_container_width=True)
             else:
-                if not df_grafik.empty:
-                    lektorzy_z_grafiku = sorted(df_grafik["Lektor"].unique())
-                    wybrany_lek = st.selectbox("Wybierz lektora do podglądu:", lektorzy_z_grafiku)
-                    
-                    df_lek = df_grafik[df_grafik["Lektor"] == wybrany_lek].copy()
-                    df_lek["Godzina"] = df_lek["Start"].apply(mins_to_time) + " - " + df_lek["End"].apply(mins_to_time)
-                    df_lek["Wpis"] = df_lek["Grupa"] + "\n📍 " + df_lek["Filia"] + " (Sala " + df_lek["Sala"] + ")"
-                    df_lek["Dzień"] = pd.Categorical(df_lek["Dzień"], categories=dni_short, ordered=True)
-                    
-                    pivot_lek = df_lek.pivot_table(index=["Godzina"], columns="Dzień", values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
-                    
-                    # Kolorowanie po grupie w widoku Lektora
-                    uniq_g = df_lek["Grupa"].unique()
-                    cmap_l = {g: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, g in enumerate(uniq_g)}
-                    
-                    try: styled_lek = pivot_lek.style.map(lambda x: style_cell_with_cmap(x, cmap_l))
-                    except: styled_lek = pivot_lek.style.applymap(lambda x: style_cell_with_cmap(x, cmap_l))
-                    
-                    st.dataframe(styled_lek, use_container_width=True)
-                else:
-                    st.info("Grafik pusty.")
+                st.info("Grafik pusty.")
