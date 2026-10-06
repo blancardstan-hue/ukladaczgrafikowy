@@ -136,4 +136,38 @@ st.subheader("2. Wgraj uzupełniony plik")
 uploaded_file = st.file_uploader("Wrzuć z powrotem wypełniony plik Excel", type=["xlsx"])
 
 if uploaded_file is not None:
-    st.success("Plik wgrany poprawnie! Wszystkie zakładki są gotowe do analizy.")
+    if uploaded_file is not None:
+    st.success("Plik wgrany poprawnie! Trwa analiza zapotrzebowania...")
+    
+    # Wczytywanie pliku Excel
+    xls = pd.ExcelFile(uploaded_file)
+    df_starsi = pd.read_excel(xls, sheet_name="Starsi Uczniowie")
+    
+    st.header("Krok 1: Weryfikacja i formowanie grup")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        bufor_dojazdu = st.slider("Bufor czasu na dojazd ze szkoły (minuty)", min_value=15, max_value=60, value=30, step=5)
+    with col2:
+        czas_trwania = st.slider("Czas trwania zajęć (minuty)", min_value=45, max_value=120, value=90, step=15)
+        
+    st.subheader("Analiza starszych uczniów")
+    
+    # Logika weryfikacji liczebności grup
+    grupy_odrzucone = df_starsi[df_starsi["Liczba Chętnych"] < 5]
+    grupy_ostrzezenie = df_starsi[df_starsi["Liczba Chętnych"] == 5]
+    grupy_zatwierdzone = df_starsi[df_starsi["Liczba Chętnych"] >= 6]
+    
+    if not grupy_odrzucone.empty:
+        st.error(f"Odrzucono {len(grupy_odrzucone)} potencjalnych grup z powodu braku wymaganej liczby chętnych (poniżej 5 osób).")
+        st.dataframe(grupy_odrzucone, use_container_width=True)
+        
+    if not grupy_ostrzezenie.empty:
+        st.warning(f"Ostrzeżenie: {len(grupy_ostrzezenie)} grup liczy dokładnie 5 osób. Zostały dodane do grafiku, ale wymagają uwagi.")
+        st.dataframe(grupy_ostrzezenie, use_container_width=True)
+        
+    st.success(f"Zatwierdzono {len(grupy_zatwierdzone)} pełnych grup (6-12 osób) do zaplanowania.")
+    st.dataframe(grupy_zatwierdzone, use_container_width=True)
+    
+    # Połączenie zatwierdzonych i tych z ostrzeżeniem jako naszej bazy do układania grafiku
+    aktywne_grupy_starsi = pd.concat([grupy_zatwierdzone, grupy_ostrzezenie])
