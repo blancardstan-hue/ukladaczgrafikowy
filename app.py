@@ -23,8 +23,8 @@ def generate_excel_template():
             "Dostępność Czw": ["14:00-19:00", "", "15:00-20:00", "", "14:00-19:00", "16:00-20:00", "14:00-18:00", "15:00-19:00", "", "14:00-20:00"],
             "Dostępność Pt": ["", "15:00-18:00", "", "13:00-17:00", "", "16:00-20:00", "14:00-18:00", "", "15:00-19:00", "14:00-18:00"],
             "Filie": [
-                "Filia Centrum", "Filia Północ", "Filia Centrum", "Filia Północ", "Filia Południe",
-                "Filia Centrum", "Filia Południe", "Filia Północ", "Filia Centrum", "Filia Południe"
+                "Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2",
+                "Nowa Wieś", "Komorów", "Pruszków", "Ursus 1", "Michałowice"
             ],
             "Poziomy": [
                 "5, 6, 7, 8, Masters", "3-5 lat, 0, 1", "2, 4", "0, 1, 2, 3", "Masters",
@@ -33,11 +33,28 @@ def generate_excel_template():
         })
         df_lektorzy.to_excel(writer, sheet_name="Lektorzy", index=False)
         
-        # Arkusz 2: Sale
+        # Arkusz 2: Sale (Generowane dynamicznie: 6 filii x 5 sal)
+        filie = ["Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2", "Nowa Wieś"]
+        nazwy_sal = []
+        filie_sal = []
+        przeznaczenie = []
+        
+        for filia in filie:
+            for i in range(1, 6):
+                nazwy_sal.append(str(i))
+                filie_sal.append(filia)
+                # Przykładowe zróżnicowanie przeznaczenia sal w każdej filii
+                if i == 1:
+                    przeznaczenie.append("3-5 lat, 0, 1, 2, 3")
+                elif i == 2:
+                    przeznaczenie.append("4, 5, 6, 7, 8, Masters")
+                else:
+                    przeznaczenie.append("Wszystkie")
+
         df_sale = pd.DataFrame({
-            "Nazwa Sali": ["Sala Żółta", "Sala Niebieska", "Sala Czerwona", "Sala Zielona"],
-            "Filia": ["Filia Centrum", "Filia Centrum", "Filia Północ", "Filia Południe"],
-            "Przeznaczenie": ["3-5 lat, 0, 1, 2, 3", "Wszystkie", "4, 5, 6, 7, 8, Masters", "Wszystkie"]
+            "Nazwa Sali": nazwy_sal,
+            "Filia": filie_sal,
+            "Przeznaczenie": przeznaczenie
         })
         df_sale.to_excel(writer, sheet_name="Sale", index=False)
         
@@ -47,7 +64,7 @@ def generate_excel_template():
             "Poziom": ["0", "1"],
             "Liczba Dzieci": [8, 10],
             "Skąd Odbiór": ["SP nr 1", "Przedszkole nr 5"],
-            "Docelowa Filia": ["Filia Centrum", "Filia Centrum"],
+            "Docelowa Filia": ["Komorów", "Michałowice"],
             "Koniec Szkoły Pon": ["13:30", "14:00"],
             "Koniec Szkoły Wt": ["14:25", "14:00"],
             "Koniec Szkoły Śr": ["13:30", "14:00"],
@@ -62,7 +79,7 @@ def generate_excel_template():
             "Szkoła i Klasa": ["SP nr 1 - Klasa 5A", "SP nr 2 - Klasa 6B", "SP nr 3 - Klasa 8C"],
             "Poziom": ["5", "6", "8"],
             "Liczba Chętnych": [6, 4, 8], 
-            "Docelowa Filia": ["Filia Centrum", "Filia Północ", "Filia Południe"],
+            "Docelowa Filia": ["Pruszków", "Ursus 1", "Nowa Wieś"],
             "Koniec Lekcji Pon": ["14:25", "15:15", "16:05"],
             "Koniec Lekcji Wt": ["15:15", "14:25", "15:15"],
             "Koniec Lekcji Śr": ["14:25", "15:15", "16:05"],
@@ -85,34 +102,31 @@ def generate_excel_template():
         # Arkusz 6: Trasy i Czas Dojazdów
         df_trasy = pd.DataFrame({
             "Punkt Początkowy": ["SP nr 1", "Przedszkole nr 5", "SP nr 2", "SP nr 3"],
-            "Punkt Końcowy": ["Filia Centrum", "Filia Centrum", "Filia Północ", "Filia Południe"],
+            "Punkt Końcowy": ["Komorów", "Michałowice", "Pruszków", "Ursus 1"],
             "Czas Przejścia (min)": [15, 10, 20, 25]
         })
         df_trasy.to_excel(writer, sheet_name="Trasy", index=False)
 
-        # Magia dostosowywania szerokości kolumn (wymaga openpyxl)
+        # Dopasowanie szerokości kolumn
         for sheetname in writer.sheets:
             worksheet = writer.sheets[sheetname]
             for col in worksheet.columns:
                 max_length = 0
-                column = col[0].column_letter # Pobiera literę kolumny, np. 'A'
+                column = col[0].column_letter
                 for cell in col:
                     try:
-                        # Sprawdzamy długość tekstu w komórce
                         if len(str(cell.value)) > max_length:
                             max_length = len(str(cell.value))
                     except:
                         pass
-                # Ustawiamy szerokość na najdłuższy tekst + bufor dla estetyki
-                adjusted_width = (max_length + 3)
-                worksheet.column_dimensions[column].width = adjusted_width
+                worksheet.column_dimensions[column].width = (max_length + 3)
                 
     return output.getvalue()
 
 st.subheader("1. Pobierz szablon")
 excel_data = generate_excel_template()
 st.download_button(
-    label="📥 Pobierz szablon (Excel)",
+    label="📥 Pobierz układacz grafików (Excel)",
     data=excel_data,
     file_name="ukladacz_grafikow.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -123,4 +137,3 @@ uploaded_file = st.file_uploader("Wrzuć z powrotem wypełniony plik Excel", typ
 
 if uploaded_file is not None:
     st.success("Plik wgrany poprawnie! Wszystkie zakładki są gotowe do analizy.")
-    # W przyszłości dodamy tu wczytywanie pd.read_excel(uploaded_file, sheet_name=None)
