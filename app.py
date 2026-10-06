@@ -3,6 +3,7 @@ import pandas as pd
 import random
 import itertools
 from io import BytesIO
+from openpyxl.utils import get_column_letter
 
 st.set_page_config(page_title="Układacz Grafików", layout="wide")
 
@@ -146,9 +147,9 @@ def generate_excel_template():
 
         for sheetname in writer.sheets:
             ws = writer.sheets[sheetname]
-            for col in ws.columns:
+            for i, col in enumerate(ws.columns, 1):
                 max_len = max([len(str(c.value)) for c in col if c.value] + [0])
-                ws.column_dimensions[col[0].column_letter].width = max_len + 3
+                ws.column_dimensions[get_column_letter(i)].width = max_len + 3
                 
     return output.getvalue()
 
@@ -231,17 +232,14 @@ def style_cell_with_cmap(val, cmap):
             return color
     return ""
 
-# ---- NOWE FUNKCJE GENERUJĄCE SIATKĘ ----
-
 def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
     sale_w_filii = sorted([s["Sala"] for s in sale_dane if s["Filia"] == filia_nazwa])
     if not sale_w_filii: sale_w_filii = ["1", "2", "3", "4", "5"]
     
-    # Tworzenie twardej macierzy dni i sal (Dzień na górze, Sala pod spodem)
     multi_cols = pd.MultiIndex.from_product([dni_short, sale_w_filii], names=["Dzień", "Sala"])
     
-    start_day = 480  # 08:00
-    end_day = 1260   # 21:00
+    start_day = 480  
+    end_day = 1260   
     time_intervals = [(m, m+30) for m in range(start_day, end_day, 30)]
     idx_labels = [mins_to_time(m) for m in range(start_day, end_day, 30)]
     
@@ -254,12 +252,10 @@ def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
         st_m = row["Start"]
         en_m = row["End"]
         
-        # Wpis do komórki z dokładną godziną
         wpis = f"{mins_to_time(st_m)}-{mins_to_time(en_m)}\n{row['Grupa']} ({row['Lektor']}){row.get('Op_Str', '')}"
         
         if d in dni_short and s in sale_w_filii:
             for i, (win_st, win_en) in enumerate(time_intervals):
-                # Jeśli lekcja nachodzi na dany 30-minutowy blok
                 if st_m < win_en and en_m > win_st:
                     current_val = df_grid.at[idx_labels[i], (d, s)]
                     if current_val: df_grid.at[idx_labels[i], (d, s)] = current_val + " | \n" + wpis
@@ -295,12 +291,14 @@ def create_excel_download(grafiki_dict):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         for nazwa, df_grid in grafiki_dict.items():
-            sheet_name = nazwa[:31] # Excel ma limit 31 znaków na nazwę zakładki
+            sheet_name = nazwa[:31] 
             df_grid.to_excel(writer, sheet_name=sheet_name)
             ws = writer.sheets[sheet_name]
-            # Ustawianie szerokości kolumn dla czytelności
-            for col in ws.columns:
-                ws.column_dimensions[col[0].column_letter].width = 25
+            
+            # Bezpieczne ustawianie szerokości kolumn (odporne na fuzję MultiIndexów)
+            for i in range(1, ws.max_column + 1):
+                ws.column_dimensions[get_column_letter(i)].width = 25
+                
     return output.getvalue()
 
 # ==========================================
@@ -469,8 +467,10 @@ if uploaded_file is not None:
                 
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
+                # DWUETAPOWY START: Najpierw 10 min przerwy, potem 5 min
                 for gap_pref in [10, 5]:
                     if znaleziono: break
+                    
                     for combo in combos:
                         if znaleziono: break
                         for lek in valid_leks:
@@ -507,15 +507,20 @@ if uploaded_file is not None:
                                                 for op in opiekunki_dane:
                                                     if op["Filia"] == zad["Filia"] and any(b_s <= en_m and b_e >= (en_m + trasa) for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(en_m, en_m+trasa, g["Start"], g["End"], 0) for g in grafik_op):
                                                         op_odp = op["Imię"]; break
+                                                
                                                 if not op_przyp or not op_odp: moze_isc = False
                                             
                                             if moze_isc:
                                                 op_str_format = ""
                                                 if op_przyp: 
-                                                    grafik_op.extend([{"Opiekunka": op_przyp, "Dzień": d, "Start": st_m-trasa, "End": st_m}, {"Opiekunka": op_odp, "Dzień": d, "Start": en_m, "End": en_m+trasa}])
+                                                    grafik_op.extend([
+                                                        {"Opiekunka": op_przyp, "Dzień": d, "Start": st_m-trasa, "End": st_m}, 
+                                                        {"Opiekunka": op_odp, "Dzień": d, "Start": en_m, "End": en_m+trasa}
+                                                    ])
                                                     c_p = f"{mins_to_time(st_m-trasa)}-{mins_to_time(st_m)}"
                                                     c_o = f"{mins_to_time(en_m)}-{mins_to_time(en_m+trasa)}"
-                                                    op_str_format = f"\n🚶 Przyprowadza: {op_przyp} ({c_p})\n🚶 Odprowadza: {op_odp} ({c_o})"
+                                                    o_odb = zad["Odbiór"]
+                                                    op_str_format = f"\n🚶 Przyprowadza: {op_przyp} ({c_p}) z: {o_odb}\n🚶 Odprowadza: {op_odp} ({c_o}) do: {o_odb}"
                                                 
                                                 zaplanowane_dni.append({
                                                     "Grupa": zad["Grupa"], "Poziom": zad["Poziom"], "Filia": zad["Filia"],
@@ -531,7 +536,9 @@ if uploaded_file is not None:
                                 przypisane_grupy_lektora[lek["Lektor"]].add(zad["Grupa"])
                                 znaleziono = True
                                 break 
-                if not znaleziono: nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak Lektora/Sali z przerwą"})
+                
+                if not znaleziono:
+                    nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak wspólnego zasobu (Lektor/Sala) z wymaganą przerwą"})
 
             st.session_state.grafik = grafik
             st.session_state.nieprzypisane = nieprzypisane
