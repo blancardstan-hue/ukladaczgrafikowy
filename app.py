@@ -187,9 +187,9 @@ def score_combo(combo):
     if len(combo) == 1: return 1
     if len(combo) == 2:
         diff = abs(dni_short.index(combo[0]) - dni_short.index(combo[1]))
-        if diff in [2, 4]: return 1  # Pon-Śr, Wt-Czw, Śr-Pt, Pon-Pt
-        elif diff == 3: return 2     # Pon-Czw, Wt-Pt
-        elif diff == 1: return 3     # Dzień po dniu (bardzo nie lubiane)
+        if diff in [2, 4]: return 1
+        elif diff == 3: return 2
+        elif diff == 1: return 3
         return 10
     return 1
 
@@ -204,7 +204,6 @@ def get_scored_combos(avail_dict, spotkan):
 def check_lektor(lek, d, st_m, en_m, grafik, gap):
     can_work = any(b_s <= st_m and b_e >= en_m for (b_s, b_e) in lek["Avail"][d])
     if not can_work: return False
-    
     zajety = any(
         g["Lektor"] == lek["Lektor"] and g["Dzień"] == d and 
         is_overlap(st_m, en_m, g["Start"], g["End"], gap) 
@@ -213,44 +212,96 @@ def check_lektor(lek, d, st_m, en_m, grafik, gap):
     return not zajety
 
 def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap):
-    dostepne = [
-        s["Sala"] for s in sale_dane 
-        if s["Filia"] == filia and 
-        (poziom in s["Poziomy"] or "Wszystkie" in s["Poziomy"])
-    ]
+    dostepne = [s["Sala"] for s in sale_dane if s["Filia"] == filia and (poziom in s["Poziomy"] or "Wszystkie" in s["Poziomy"])]
     for s in dostepne:
-        zajeta = any(
-            g["Sala"] == s and g["Dzień"] == d and g["Filia"] == filia and 
-            is_overlap(st_m, en_m, g["Start"], g["End"], gap) 
-            for g in grafik
-        )
+        zajeta = any(g["Sala"] == s and g["Dzień"] == d and g["Filia"] == filia and is_overlap(st_m, en_m, g["Start"], g["End"], gap) for g in grafik)
         if not zajeta: return s
     return None
 
 colors_pool = [
     "#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", 
     "#a0c4ff", "#bdb2ff", "#ffc6ff", "#fbb1bd", "#e2ece9",
-    "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4",
-    "#fbc4ab", "#f08080", "#84a59d", "#f6bd60", "#f7ede2"
+    "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4"
 ]
 
-def get_color_map(unique_vals):
-    cmap = {}
-    idx = 0
-    for val in unique_vals:
-        if val == "-" or pd.isna(val): 
-            cmap[val] = ""
-        else: 
-            cmap[val] = f"background-color: {colors_pool[idx % len(colors_pool)]}; color: #000000; font-weight: bold;"
-            idx += 1
-    return cmap
-
 def style_cell_with_cmap(val, cmap):
-    if val == "-" or pd.isna(val): return ""
+    if val == "-" or pd.isna(val) or val == "": return ""
     for k, color in cmap.items():
         if f"({k})" in str(val) or str(val).startswith(k):
             return color
     return ""
+
+# ---- NOWE FUNKCJE GENERUJĄCE SIATKĘ ----
+
+def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
+    sale_w_filii = sorted([s["Sala"] for s in sale_dane if s["Filia"] == filia_nazwa])
+    if not sale_w_filii: sale_w_filii = ["1", "2", "3", "4", "5"]
+    
+    # Tworzenie twardej macierzy dni i sal (Dzień na górze, Sala pod spodem)
+    multi_cols = pd.MultiIndex.from_product([dni_short, sale_w_filii], names=["Dzień", "Sala"])
+    
+    start_day = 480  # 08:00
+    end_day = 1260   # 21:00
+    time_intervals = [(m, m+30) for m in range(start_day, end_day, 30)]
+    idx_labels = [mins_to_time(m) for m in range(start_day, end_day, 30)]
+    
+    df_grid = pd.DataFrame(index=idx_labels, columns=multi_cols).fillna("")
+    if df_f.empty: return df_grid
+    
+    for _, row in df_f.iterrows():
+        d = row["Dzień"]
+        s = row["Sala"]
+        st_m = row["Start"]
+        en_m = row["End"]
+        
+        # Wpis do komórki z dokładną godziną
+        wpis = f"{mins_to_time(st_m)}-{mins_to_time(en_m)}\n{row['Grupa']} ({row['Lektor']}){row.get('Op_Str', '')}"
+        
+        if d in dni_short and s in sale_w_filii:
+            for i, (win_st, win_en) in enumerate(time_intervals):
+                # Jeśli lekcja nachodzi na dany 30-minutowy blok
+                if st_m < win_en and en_m > win_st:
+                    current_val = df_grid.at[idx_labels[i], (d, s)]
+                    if current_val: df_grid.at[idx_labels[i], (d, s)] = current_val + " | \n" + wpis
+                    else: df_grid.at[idx_labels[i], (d, s)] = wpis
+                        
+    return df_grid
+
+def generate_grid_for_lektor(df_lek):
+    start_day = 480
+    end_day = 1260
+    time_intervals = [(m, m+30) for m in range(start_day, end_day, 30)]
+    idx_labels = [mins_to_time(m) for m in range(start_day, end_day, 30)]
+    
+    df_grid = pd.DataFrame(index=idx_labels, columns=dni_short).fillna("")
+    if df_lek.empty: return df_grid
+    
+    for _, row in df_lek.iterrows():
+        d = row["Dzień"]
+        st_m = row["Start"]
+        en_m = row["End"]
+        wpis = f"{mins_to_time(st_m)}-{mins_to_time(en_m)}\n{row['Grupa']}\n📍 {row['Filia']} (S: {row['Sala']})"
+        
+        if d in dni_short:
+            for i, (win_st, win_en) in enumerate(time_intervals):
+                if st_m < win_en and en_m > win_st:
+                    current_val = df_grid.at[idx_labels[i], d]
+                    if current_val: df_grid.at[idx_labels[i], d] = current_val + " | \n" + wpis
+                    else: df_grid.at[idx_labels[i], d] = wpis
+                    
+    return df_grid
+
+def create_excel_download(grafiki_dict):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        for nazwa, df_grid in grafiki_dict.items():
+            sheet_name = nazwa[:31] # Excel ma limit 31 znaków na nazwę zakładki
+            df_grid.to_excel(writer, sheet_name=sheet_name)
+            ws = writer.sheets[sheet_name]
+            # Ustawianie szerokości kolumn dla czytelności
+            for col in ws.columns:
+                ws.column_dimensions[col[0].column_letter].width = 25
+    return output.getvalue()
 
 # ==========================================
 # INTERFEJS GŁÓWNY
@@ -272,12 +323,10 @@ if uploaded_file is not None:
     df_opiekunki = pd.read_excel(xls, "Opiekunki") if "Opiekunki" in xls.sheet_names else pd.DataFrame()
     
     df_mlodsze = pd.read_excel(xls, "Młodsze Dzieci")
-    if "Czas trwania (min)" not in df_mlodsze.columns: 
-        df_mlodsze.insert(3, "Czas trwania (min)", 60)
+    if "Czas trwania (min)" not in df_mlodsze.columns: df_mlodsze.insert(3, "Czas trwania (min)", 60)
     
     df_starsi = pd.read_excel(xls, "Starsi Uczniowie")
-    if "Czas trwania (min)" not in df_starsi.columns: 
-        df_starsi.insert(4, "Czas trwania (min)", 90)
+    if "Czas trwania (min)" not in df_starsi.columns: df_starsi.insert(4, "Czas trwania (min)", 90)
 
     st.header("Krok 1: Formowanie")
     filie_unikalne = sorted(df_sale["Filia"].dropna().unique())
@@ -347,7 +396,7 @@ if uploaded_file is not None:
     edyt_starsi = st.data_editor(df_aktywne, use_container_width=True, num_rows="dynamic", key="e_st")
 
     # ==========================================
-    # KROK 2: GRAFIK (W SESSION_STATE ABY NIE ZNIKAŁO)
+    # KROK 2: GRAFIK (SESSION_STATE)
     # ==========================================
     st.markdown("---")
     st.header("Krok 2: Automatyczne Układanie Grafiku")
@@ -409,7 +458,6 @@ if uploaded_file is not None:
                 zadania.append({"Grupa": r["Nazwa Grupy"], "Poziom": str(r["Poziom"]), "Filia": str(r["Docelowa Filia"]), "Czas": r["Czas trwania (min)"], "Spotkań": int(r.get("Liczba Spotkań", 2)), "Typ": "Starsza", "Odbiór": "", "Windows": zbuduj_okna(r, "Starsza")})
                 
             zadania.sort(key=lambda x: (len(x["Windows"]), -x["Czas"]))
-            
             przypisane_grupy_lektora = {l["Lektor"]: set() for l in lektorzy_dane}
             
             for zad in zadania:
@@ -417,17 +465,12 @@ if uploaded_file is not None:
                 znaleziono = False
                 
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
-                valid_leks.sort(key=lambda l: (
-                    len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit"],
-                    len(przypisane_grupy_lektora[l["Lektor"]])
-                ))
+                valid_leks.sort(key=lambda l: (len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit"], len(przypisane_grupy_lektora[l["Lektor"]])))
                 
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
-                # DWUETAPOWY START: Najpierw 10 min przerwy, potem 5 min
                 for gap_pref in [10, 5]:
                     if znaleziono: break
-                    
                     for combo in combos:
                         if znaleziono: break
                         for lek in valid_leks:
@@ -464,20 +507,15 @@ if uploaded_file is not None:
                                                 for op in opiekunki_dane:
                                                     if op["Filia"] == zad["Filia"] and any(b_s <= en_m and b_e >= (en_m + trasa) for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(en_m, en_m+trasa, g["Start"], g["End"], 0) for g in grafik_op):
                                                         op_odp = op["Imię"]; break
-                                                
                                                 if not op_przyp or not op_odp: moze_isc = False
                                             
                                             if moze_isc:
                                                 op_str_format = ""
                                                 if op_przyp: 
-                                                    grafik_op.extend([
-                                                        {"Opiekunka": op_przyp, "Dzień": d, "Start": st_m-trasa, "End": st_m}, 
-                                                        {"Opiekunka": op_odp, "Dzień": d, "Start": en_m, "End": en_m+trasa}
-                                                    ])
+                                                    grafik_op.extend([{"Opiekunka": op_przyp, "Dzień": d, "Start": st_m-trasa, "End": st_m}, {"Opiekunka": op_odp, "Dzień": d, "Start": en_m, "End": en_m+trasa}])
                                                     c_p = f"{mins_to_time(st_m-trasa)}-{mins_to_time(st_m)}"
                                                     c_o = f"{mins_to_time(en_m)}-{mins_to_time(en_m+trasa)}"
-                                                    o_odb = zad["Odbiór"]
-                                                    op_str_format = f"\n🚶 Przyprowadza: {op_przyp} ({c_p}) z: {o_odb}\n🚶 Odprowadza: {op_odp} ({c_o}) do: {o_odb}"
+                                                    op_str_format = f"\n🚶 Przyprowadza: {op_przyp} ({c_p})\n🚶 Odprowadza: {op_odp} ({c_o})"
                                                 
                                                 zaplanowane_dni.append({
                                                     "Grupa": zad["Grupa"], "Poziom": zad["Poziom"], "Filia": zad["Filia"],
@@ -493,9 +531,7 @@ if uploaded_file is not None:
                                 przypisane_grupy_lektora[lek["Lektor"]].add(zad["Grupa"])
                                 znaleziono = True
                                 break 
-                
-                if not znaleziono:
-                    nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak wspólnego zasobu (Lektor/Sala) z wymaganą przerwą"})
+                if not znaleziono: nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak Lektora/Sali z przerwą"})
 
             st.session_state.grafik = grafik
             st.session_state.nieprzypisane = nieprzypisane
@@ -516,31 +552,29 @@ if uploaded_file is not None:
             
         st.subheader("Wizualizacja Grafiku")
         
-        widok_opcja = st.radio("Perspektywa:", ["Według Filii (Zarządzanie salami)", "Według Lektorów (Indywidualnie)"], horizontal=True)
+        widok_opcja = st.radio("Perspektywa:", ["Według Filii (Siatka 30-min)", "Według Lektorów (Indywidualnie)"], horizontal=True)
         df_grafik = pd.DataFrame(grafik)
         
-        if widok_opcja == "Według Filii (Zarządzanie salami)":
+        grafiki_do_eksportu = {}
+        
+        if widok_opcja == "Według Filii (Siatka 30-min)":
             tabs = st.tabs(filie_unikalne)
             for idx, tab in enumerate(tabs):
                 f_nazwa = filie_unikalne[idx]
                 with tab:
                     if not df_grafik.empty:
                         df_f = df_grafik[df_grafik["Filia"] == f_nazwa].copy()
-                        if not df_f.empty:
-                            df_f["Godzina"] = df_f["Start"].apply(mins_to_time) + " - " + df_f["End"].apply(mins_to_time)
-                            df_f["Wpis"] = df_f["Grupa"] + " (" + df_f["Lektor"] + ")" + df_f["Op_Str"]
-                            df_f["Dzień"] = pd.Categorical(df_f["Dzień"], categories=dni_short, ordered=True)
-                            
-                            pivot = df_f.pivot_table(index=["Godzina"], columns=["Dzień", "Sala"], values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
-                            
-                            # Kolorowanie per lektor wewnątrz danej filii
+                        df_grid = generate_grid_for_filia(df_f, f_nazwa, sale_dane)
+                        grafiki_do_eksportu[f_nazwa] = df_grid
+                        
+                        if not df_grid.empty:
                             uniq_leks = df_f["Lektor"].unique()
                             cmap = {lek: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, lek in enumerate(uniq_leks)}
                             
-                            try: styled = pivot.style.map(lambda x: style_cell_with_cmap(x, cmap))
-                            except: styled = pivot.style.applymap(lambda x: style_cell_with_cmap(x, cmap))
+                            try: styled = df_grid.style.map(lambda x: style_cell_with_cmap(x, cmap))
+                            except: styled = df_grid.style.applymap(lambda x: style_cell_with_cmap(x, cmap))
                             
-                            st.dataframe(styled, use_container_width=True)
+                            st.dataframe(styled, use_container_width=False, height=600)
                         else: st.info(f"Brak zajęć dla {f_nazwa}.")
                     else: st.info("Grafik pusty.")
                     
@@ -550,19 +584,27 @@ if uploaded_file is not None:
                 wybrany_lek = st.selectbox("Wybierz lektora do podglądu:", lektorzy_z_grafiku)
                 
                 df_lek = df_grafik[df_grafik["Lektor"] == wybrany_lek].copy()
-                df_lek["Godzina"] = df_lek["Start"].apply(mins_to_time) + " - " + df_lek["End"].apply(mins_to_time)
-                df_lek["Wpis"] = df_lek["Grupa"] + "\n📍 " + df_lek["Filia"] + " (Sala " + df_lek["Sala"] + ")"
-                df_lek["Dzień"] = pd.Categorical(df_lek["Dzień"], categories=dni_short, ordered=True)
+                df_grid_lek = generate_grid_for_lektor(df_lek)
+                grafiki_do_eksportu[wybrany_lek] = df_grid_lek
                 
-                pivot_lek = df_lek.pivot_table(index=["Godzina"], columns="Dzień", values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
-                
-                # Kolorowanie po grupie w widoku Lektora
-                uniq_g = df_lek["Grupa"].unique()
-                cmap_l = {g: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, g in enumerate(uniq_g)}
-                
-                try: styled_lek = pivot_lek.style.map(lambda x: style_cell_with_cmap(x, cmap_l))
-                except: styled_lek = pivot_lek.style.applymap(lambda x: style_cell_with_cmap(x, cmap_l))
-                
-                st.dataframe(styled_lek, use_container_width=True)
-            else:
-                st.info("Grafik pusty.")
+                if not df_grid_lek.empty:
+                    uniq_g = df_lek["Grupa"].unique()
+                    cmap_l = {g: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, g in enumerate(uniq_g)}
+                    
+                    try: styled_lek = df_grid_lek.style.map(lambda x: style_cell_with_cmap(x, cmap_l))
+                    except: styled_lek = df_grid_lek.style.applymap(lambda x: style_cell_with_cmap(x, cmap_l))
+                    
+                    st.dataframe(styled_lek, use_container_width=True, height=600)
+                else: st.info("Grafik pusty.")
+            else: st.info("Grafik pusty.")
+
+        # Przycisk Eksportu do Excela pod tabelą
+        if grafiki_do_eksportu:
+            st.markdown("---")
+            excel_data = create_excel_download(grafiki_do_eksportu)
+            st.download_button(
+                label="📥 Pobierz wygenerowany grafik (Excel)", 
+                data=excel_data, 
+                file_name="Gotowe_Grafiki.xlsx",
+                type="primary"
+            )
