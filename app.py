@@ -347,7 +347,6 @@ if uploaded_file is not None:
                 
             lektorzy_dane = []
             for _, r in df_lektorzy.iterrows():
-                # TUTAJ BYŁ BŁĄD Z LITERÓWKĄ - POPRAWIONO NA "Poziomy"
                 l_poziomy = [
                     p.strip() for p in str(r["Poziomy"]).split(",")
                 ] if pd.notna(r["Poziomy"]) else []
@@ -383,7 +382,9 @@ if uploaded_file is not None:
                 do = str(r["Docelowa Filia"])
                 t_czas = czas_tras.get(f"{skad}_{do}", 15)
                 for idx, d in enumerate(dni_long):
-                    e_m = time_to_mins(r[d])
+                    # TŁUMACZENIE NAZWY KOLUMNY DLA MŁODSZYCH DZIECI
+                    d_mlodsze = d.replace("Lekcji", "Szkoły")
+                    e_m = time_to_mins(r.get(d_mlodsze, ""))
                     if e_m > 0: av_days[dni_short[idx]] = e_m + t_czas + 5
                 
                 zadania.append({
