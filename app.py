@@ -201,20 +201,47 @@ def get_scored_combos(avail_dict, spotkan):
     scored.sort(key=lambda x: x[1]) 
     return [x[0] for x in scored]
 
-def get_color_map(unique_vals):
-    colors = [
-        "#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", 
-        "#a0c4ff", "#bdb2ff", "#ffc6ff", "#fbb1bd", "#e2ece9",
-        "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4",
-        "#fbc4ab", "#f08080", "#84a59d", "#f6bd60", "#f7ede2"
+def check_lektor(lek, d, st_m, en_m, grafik, gap):
+    can_work = any(b_s <= st_m and b_e >= en_m for (b_s, b_e) in lek["Avail"][d])
+    if not can_work: return False
+    
+    zajety = any(
+        g["Lektor"] == lek["Lektor"] and g["Dzień"] == d and 
+        is_overlap(st_m, en_m, g["Start"], g["End"], gap) 
+        for g in grafik
+    )
+    return not zajety
+
+def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap):
+    dostepne = [
+        s["Sala"] for s in sale_dane 
+        if s["Filia"] == filia and 
+        (poziom in s["Poziomy"] or "Wszystkie" in s["Poziomy"])
     ]
+    for s in dostepne:
+        zajeta = any(
+            g["Sala"] == s and g["Dzień"] == d and g["Filia"] == filia and 
+            is_overlap(st_m, en_m, g["Start"], g["End"], gap) 
+            for g in grafik
+        )
+        if not zajeta: return s
+    return None
+
+colors_pool = [
+    "#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", 
+    "#a0c4ff", "#bdb2ff", "#ffc6ff", "#fbb1bd", "#e2ece9",
+    "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4",
+    "#fbc4ab", "#f08080", "#84a59d", "#f6bd60", "#f7ede2"
+]
+
+def get_color_map(unique_vals):
     cmap = {}
     idx = 0
     for val in unique_vals:
         if val == "-" or pd.isna(val): 
             cmap[val] = ""
         else: 
-            cmap[val] = f"background-color: {colors[idx % len(colors)]}; color: #000000; font-weight: bold;"
+            cmap[val] = f"background-color: {colors_pool[idx % len(colors_pool)]}; color: #000000; font-weight: bold;"
             idx += 1
     return cmap
 
@@ -383,7 +410,6 @@ if uploaded_file is not None:
                 
             zadania.sort(key=lambda x: (len(x["Windows"]), -x["Czas"]))
             
-            # Słownik do śledzenia przydziałów grup dla nauczycieli
             przypisane_grupy_lektora = {l["Lektor"]: set() for l in lektorzy_dane}
             
             for zad in zadania:
@@ -391,10 +417,6 @@ if uploaded_file is not None:
                 znaleziono = False
                 
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
-                
-                # Sortowanie lektorów: 
-                # 1. Preferuj tych PONIŻEJ limitu (False jest przed True)
-                # 2. Równomiernie rozkładaj obciążenie (rosnąco wg przypisanych)
                 valid_leks.sort(key=lambda l: (
                     len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit"],
                     len(przypisane_grupy_lektora[l["Lektor"]])
