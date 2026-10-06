@@ -176,7 +176,6 @@ def is_overlap(start1, end1, start2, end2):
     return max(start1, start2) < min(end1, end2)
 
 def score_combo(combo):
-    # Ocena układu dni (1 - Najlepszy, 3 - Najgorszy)
     if len(combo) == 1: return 1
     if len(combo) == 2:
         idx1 = dni_short.index(combo[0])
@@ -184,9 +183,9 @@ def score_combo(combo):
         diff = abs(idx1 - idx2)
         if diff == 2 or diff == 4: return 1  # Pon-Śr, Wt-Czw, Śr-Pt, Pon-Pt
         elif diff == 3: return 2             # Pon-Czw, Wt-Pt
-        elif diff == 1: return 3             # Dzień po dniu (np. Pon-Wt)
+        elif diff == 1: return 3             # Dzień po dniu
         return 10
-    return 1 # Fallback dla większej ilości spotkań
+    return 1
 
 def get_scored_combos(avail_dict, spotkan):
     valid_days = list(avail_dict.keys())
@@ -194,14 +193,13 @@ def get_scored_combos(avail_dict, spotkan):
     
     combos = list(itertools.combinations(valid_days, spotkan))
     scored = [(c, score_combo(c)) for c in combos]
-    scored.sort(key=lambda x: x[1]) # Najpierw najlepsze wzorce
+    scored.sort(key=lambda x: x[1]) 
     return [x[0] for x in scored]
 
 def check_lektor(lek, d, st_m, en_m, grafik):
     can_work = any(b_s <= st_m and b_e >= en_m for (b_s, b_e) in lek["Avail"][d])
     if not can_work: return False
     
-    # 5 min bufor dla tego samego lektora na dojscie miedzy salami
     zajety = any(
         g["Lektor"] == lek["Lektor"] and g["Dzień"] == d and 
         is_overlap(st_m, en_m, g["Start"], g["End"] + 5) 
@@ -291,7 +289,7 @@ if uploaded_file is not None:
         
     def avg_t(r):
         v = [r[d+"_mins"] for d in dni_long if r[d+"_mins"] > 0]
-        return sum(v) / max(1, len(v))
+        return sum(v) / max(1, len(v)) if v else 0
     df_s["Avg_Time"] = df_s.apply(avg_t, axis=1)
 
     utworzone_g = []
@@ -343,20 +341,25 @@ if uploaded_file is not None:
             grafik = []
             nieprzypisane = []
             
-            # Przygotowanie zasobów
             czas_tras = {}
             for _, r in df_trasy.iterrows():
                 czas_tras[f"{r['Punkt Początkowy']}_{r['Punkt Końcowy']}"] = r["Czas Przejścia (min)"]
                 
             lektorzy_dane = []
             for _, r in df_lektorzy.iterrows():
-                l_poziomy = [p.strip() for p in str(r["Poziom"]).split(",")] if pd.notna(r["Poziom"]) else []
-                l_filie = [f.strip() for f in str(r["Filie"]).split(",")] if pd.notna(r["Filie"]) else []
+                # TUTAJ BYŁ BŁĄD Z LITERÓWKĄ - POPRAWIONO NA "Poziomy"
+                l_poziomy = [
+                    p.strip() for p in str(r["Poziomy"]).split(",")
+                ] if pd.notna(r["Poziomy"]) else []
+                
+                l_filie = [
+                    f.strip() for f in str(r["Filie"]).split(",")
+                ] if pd.notna(r["Filie"]) else []
                 
                 avail = {}
                 for idx, d_long in enumerate(dni_long):
                     k = d_long.replace("Koniec Lekcji ", "Dostępność ")
-                    avail[dni_short[idx]] = parse_availability(r[k])
+                    avail[dni_short[idx]] = parse_availability(r.get(k, ""))
                 
                 lektorzy_dane.append({
                     "Lektor": r["Lektor"], "Poziomy": l_poziomy, 
@@ -365,14 +368,15 @@ if uploaded_file is not None:
                 
             sale_dane = []
             for _, r in df_sale.iterrows():
-                s_poz = [p.strip() for p in str(r["Przeznaczenie"]).split(",")] if pd.notna(r["Przeznaczenie"]) else []
+                s_poz = [
+                    p.strip() for p in str(r["Przeznaczenie"]).split(",")
+                ] if pd.notna(r["Przeznaczenie"]) else []
                 sale_dane.append({
-                    "Sala": str(r["Nazwa Sali"]), "Filia": r["Filia"], "Poziomy": s_poz
+                    "Sala": str(r["Nazwa Sali"]), "Filia": r["Filia"], 
+                    "Poziomy": s_poz
                 })
                 
-            # Przygotowanie zadań (grup)
             zadania = []
-            
             for _, r in edyt_mlodsze.iterrows():
                 av_days = {}
                 skad = str(r.get("Skąd Odbiór", ""))
@@ -394,7 +398,7 @@ if uploaded_file is not None:
                 do = str(r["Docelowa Filia"])
                 bufor = bufory_filii.get(do, 30)
                 for idx, d in enumerate(dni_long):
-                    e_m = time_to_mins(r[d])
+                    e_m = time_to_mins(r.get(d, ""))
                     if e_m > 0: av_days[dni_short[idx]] = e_m + bufor
                 
                 zadania.append({
@@ -404,7 +408,6 @@ if uploaded_file is not None:
                     "Available_Days": av_days
                 })
                 
-            # Trudniejsze zadania pierwsze
             zadania.sort(key=lambda x: (len(x["Available_Days"]), -x["Czas"]))
             
             for zad in zadania:
@@ -448,31 +451,39 @@ if uploaded_file is not None:
                                 st_m += 5
                             if not dzien_ok: break
                             
-                        # Jeśli znaleziono układ dla WSZYSTKICH dni z JEDNYM lektorem
                         if len(zaplanowane_dni) == len(combo):
                             grafik.extend(zaplanowane_dni)
                             znaleziono = True
-                            break # Wychodzimy z pętli lektora
+                            break 
                             
-                    if znaleziono: break # Wychodzimy z pętli wzorców
+                    if znaleziono: break 
                 
                 if not znaleziono:
                     nieprzypisane.append({
                         "Grupa": zad["Grupa"], "Filia": zad["Filia"], 
                         "Poziom": zad["Poziom"],
-                        "Problem": "Brak wspólnego lektora / sali na wymagane dni",
-                        "Sugestia": "Sprawdź lub wydłuż dostępność lektorów dla tej filii."
+                        "Problem": "Brak wspólnego lektora/sali na dopasowane dni",
+                        "Sugestia": "Sprawdź dostępność lektorów dla tej filii."
                     })
 
             # ==========================================
             # WIZUALIZACJA WYNIKÓW
             # ==========================================
             if nieprzypisane:
-                st.error(f"🔴 Konflikty grafiku! ({len(nieprzypisane)} grup wylądowało w poczekalni).")
-                st.dataframe(pd.DataFrame(nieprzypisane), use_container_width=True)
+                st.error(
+                    f"🔴 Konflikty grafiku! ({len(nieprzypisane)} "
+                    "grup wylądowało w poczekalni)."
+                )
+                st.dataframe(
+                    pd.DataFrame(nieprzypisane), 
+                    use_container_width=True
+                )
             else:
                 st.balloons()
-                st.success("🎉 Sukces! Przypisano wszystkie grupy zachowując formułę (np. Pon-Śr, stały lektor)!")
+                st.success(
+                    "🎉 Sukces! Przypisano wszystkie grupy "
+                    "zachowując preferowaną formułę blokową!"
+                )
                 
             st.subheader("Wizualizacja Grafiku (Widok Filii)")
             tabs = st.tabs(filie_unikalne)
@@ -484,7 +495,10 @@ if uploaded_file is not None:
                     if not df_grafik.empty:
                         df_f = df_grafik[df_grafik["Filia"] == filia_nazwa]
                         if not df_f.empty:
-                            df_f["Godzina"] = df_f["Start"].apply(mins_to_time) + " - " + df_f["End"].apply(mins_to_time)
+                            df_f["Godzina"] = df_f["Start"].apply(
+                                mins_to_time
+                            ) + " - " + df_f["End"].apply(mins_to_time)
+                            
                             df_f["Wpis"] = df_f["Grupa"] + " (" + df_f["Lektor"] + ")"
                             
                             pivot = df_f.pivot_table(
@@ -496,6 +510,6 @@ if uploaded_file is not None:
                             
                             st.dataframe(pivot, use_container_width=True)
                         else:
-                            st.info(f"Brak przypisanych zajęć dla filii {filia_nazwa}.")
+                            st.info(f"Brak zajęć dla filii {filia_nazwa}.")
                     else:
-                        st.info("Grafik jest całkowicie pusty.")
+                        st.info("Grafik jest pusty.")
