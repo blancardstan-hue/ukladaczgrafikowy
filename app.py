@@ -4,6 +4,7 @@ import random
 import itertools
 from io import BytesIO
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
 
 st.set_page_config(page_title="Układacz Grafików", layout="wide")
 
@@ -290,12 +291,18 @@ def generate_grid_for_lektor(df_lek):
 def create_excel_download(grafiki_dict):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        for nazwa, df_grid in grafiki_dict.items():
+        for nazwa, styled_df in grafiki_dict.items():
             sheet_name = nazwa[:31] 
-            df_grid.to_excel(writer, sheet_name=sheet_name)
+            # Zapisz OSTYLOWANY dataframe bezpośrednio do Excela!
+            styled_df.to_excel(writer, sheet_name=sheet_name)
             ws = writer.sheets[sheet_name]
             
-            # Bezpieczne ustawianie szerokości kolumn (odporne na fuzję MultiIndexów)
+            # Włączenie zawijania tekstu i centrowania dla czytelności z multi-indexem
+            for row in ws.iter_rows():
+                for cell in row:
+                    cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
+            
+            # Bezpieczne ustawianie szerokości kolumn (odporne na fuzję komórek)
             for i in range(1, ws.max_column + 1):
                 ws.column_dimensions[get_column_letter(i)].width = 25
                 
@@ -317,6 +324,14 @@ if uploaded_file is not None:
         df_lektorzy.insert(1, "Zadeklarowana liczba grup", 100)
         
     df_sale = pd.read_excel(xls, "Sale")
+    
+    # Rozwiązanie błędu "sale_dane is not defined" - przenosimy parsowanie tutaj
+    sale_dane = []
+    for _, r in df_sale.iterrows():
+        s_poz = [p.strip() for p in str(r["Przeznaczenie"]).split(",")] if pd.notna(r["Przeznaczenie"]) else []
+        if "Masters" in s_poz: s_poz.extend(["9", "10", "11", "12"])
+        sale_dane.append({"Sala": str(r["Nazwa Sali"]), "Filia": r["Filia"], "Poziomy": s_poz})
+        
     df_trasy = pd.read_excel(xls, "Trasy")
     df_opiekunki = pd.read_excel(xls, "Opiekunki") if "Opiekunki" in xls.sheet_names else pd.DataFrame()
     
@@ -428,12 +443,6 @@ if uploaded_file is not None:
                     avail = {dni_short[i]: parse_availability(r.get(f"Dostępność {dni_short[i]}", "")) for i in range(5)}
                     opiekunki_dane.append({"Imię": r["Imię Opiekunki"], "Filia": r.get("Filia", ""), "Avail": avail})
 
-            sale_dane = []
-            for _, r in df_sale.iterrows():
-                s_poz = [p.strip() for p in str(r["Przeznaczenie"]).split(",")] if pd.notna(r["Przeznaczenie"]) else []
-                if "Masters" in s_poz: s_poz.extend(["9", "10", "11", "12"])
-                sale_dane.append({"Sala": str(r["Nazwa Sali"]), "Filia": r["Filia"], "Poziomy": s_poz})
-                
             zadania = []
             def zbuduj_okna(r, typ):
                 av_windows = {}
@@ -572,7 +581,6 @@ if uploaded_file is not None:
                     if not df_grafik.empty:
                         df_f = df_grafik[df_grafik["Filia"] == f_nazwa].copy()
                         df_grid = generate_grid_for_filia(df_f, f_nazwa, sale_dane)
-                        grafiki_do_eksportu[f_nazwa] = df_grid
                         
                         if not df_grid.empty:
                             uniq_leks = df_f["Lektor"].unique()
@@ -581,6 +589,7 @@ if uploaded_file is not None:
                             try: styled = df_grid.style.map(lambda x: style_cell_with_cmap(x, cmap))
                             except: styled = df_grid.style.applymap(lambda x: style_cell_with_cmap(x, cmap))
                             
+                            grafiki_do_eksportu[f_nazwa] = styled
                             st.dataframe(styled, use_container_width=False, height=600)
                         else: st.info(f"Brak zajęć dla {f_nazwa}.")
                     else: st.info("Grafik pusty.")
@@ -592,7 +601,6 @@ if uploaded_file is not None:
                 
                 df_lek = df_grafik[df_grafik["Lektor"] == wybrany_lek].copy()
                 df_grid_lek = generate_grid_for_lektor(df_lek)
-                grafiki_do_eksportu[wybrany_lek] = df_grid_lek
                 
                 if not df_grid_lek.empty:
                     uniq_g = df_lek["Grupa"].unique()
@@ -601,11 +609,11 @@ if uploaded_file is not None:
                     try: styled_lek = df_grid_lek.style.map(lambda x: style_cell_with_cmap(x, cmap_l))
                     except: styled_lek = df_grid_lek.style.applymap(lambda x: style_cell_with_cmap(x, cmap_l))
                     
+                    grafiki_do_eksportu[wybrany_lek] = styled_lek
                     st.dataframe(styled_lek, use_container_width=True, height=600)
                 else: st.info("Grafik pusty.")
             else: st.info("Grafik pusty.")
 
-        # Przycisk Eksportu do Excela pod tabelą
         if grafiki_do_eksportu:
             st.markdown("---")
             excel_data = create_excel_download(grafiki_do_eksportu)
