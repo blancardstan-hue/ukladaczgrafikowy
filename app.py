@@ -92,154 +92,31 @@ def generate_excel_template():
         
         # Arkusz 4: Starsi Uczniowie - GENEROWANIE LOSOWEJ BAZY TESTOWEJ
         starsi_data = []
-        godziny = ["13:30", "14:25", "15:15", "16:05", "16:55"]
+        godziny = ["12:00", "12:30", "13:20", "13:40", "14:25", "15:00", "15:15", "15:20", "16:05"]
         
-        # Generowanie podstawówki (SP nr 1, klasy 1-8)
+        # Przykłady wymuszone dla pewności (z Twoich promptów)
+        wymuszone = [
+            ("SP nr 1", "4", "B", 3, "13:20"), ("SP nr 1", "4", "C", 1, "13:40"), 
+            ("SP nr 1", "4", "A", 2, "12:20"), ("SP nr 1", "4", "D", 4, "13:30"),
+            ("SP nr 1", "5", "A", 0, "15:00"), ("SP nr 1", "5", "B", 1, "15:30"),
+            ("SP nr 1", "5", "C", 0, "15:15"), ("SP nr 1", "5", "D", 1, "15:00"),
+            ("SP nr 1", "8", "A", 5, "12:00"), ("SP nr 1", "8", "B", 9, "15:00"),
+            ("SP nr 1", "8", "C", 4, "12:30"), ("SP nr 1", "8", "D", 2, "15:20")
+        ]
+        for sz, poz, lit, chetni, czas in wymuszone:
+            starsi_data.append({
+                "Szkoła i Klasa": f"{sz} - Klasa {poz}{lit}",
+                "Poziom": poz, "Liczba Chętnych": chetni, "Czas trwania (min)": 90,
+                "Docelowa Filia": "Komorów",
+                "Koniec Lekcji Pon": czas, "Koniec Lekcji Wt": czas, "Koniec Lekcji Śr": czas,
+                "Koniec Lekcji Czw": czas, "Koniec Lekcji Pt": czas
+            })
+
+        # Reszta generatora
         for klasa_num in range(1, 9):
-            poziom = str(klasa_num)
-            liczba_oddzialow = random.randint(4, 6) # Generuje klasy np. od A do D, E lub F
+            if klasa_num in [4, 5, 8]: continue # Ominięcie wymuszonych
+            liczba_oddzialow = random.randint(4, 6)
             for litera in ['A', 'B', 'C', 'D', 'E', 'F'][:liczba_oddzialow]:
                 starsi_data.append({
                     "Szkoła i Klasa": f"SP nr 1 - Klasa {klasa_num}{litera}",
-                    "Poziom": poziom,
-                    "Liczba Chętnych": random.randint(0, 10),
-                    "Czas trwania (min)": 90,
-                    "Docelowa Filia": random.choice(filie),
-                    "Koniec Lekcji Pon": random.choice(godziny),
-                    "Koniec Lekcji Wt": random.choice(godziny),
-                    "Koniec Lekcji Śr": random.choice(godziny),
-                    "Koniec Lekcji Czw": random.choice(godziny),
-                    "Koniec Lekcji Pt": random.choice(godziny)
-                })
-                
-        # Generowanie trzech liceów (LO nr 1, 2, 3, klasy 1-4)
-        for lo_num in range(1, 4):
-            for klasa_num in range(1, 5):
-                liczba_oddzialow = random.randint(4, 6)
-                for litera in ['A', 'B', 'C', 'D', 'E', 'F'][:liczba_oddzialow]:
-                    starsi_data.append({
-                        "Szkoła i Klasa": f"LO nr {lo_num} - Klasa {klasa_num}{litera}",
-                        "Poziom": "Masters",
-                        "Liczba Chętnych": random.randint(0, 10),
-                        "Czas trwania (min)": 90,
-                        "Docelowa Filia": random.choice(filie),
-                        "Koniec Lekcji Pon": random.choice(godziny),
-                        "Koniec Lekcji Wt": random.choice(godziny),
-                        "Koniec Lekcji Śr": random.choice(godziny),
-                        "Koniec Lekcji Czw": random.choice(godziny),
-                        "Koniec Lekcji Pt": random.choice(godziny)
-                    })
-
-        df_starsi = pd.DataFrame(starsi_data)
-        df_starsi.to_excel(writer, sheet_name="Starsi Uczniowie", index=False)
-        
-        # Arkusz 5: Opiekunki
-        df_opiekunki = pd.DataFrame({
-            "Imię Opiekunki": ["Marta Wiśniewska", "Krystyna Kaczmarek", "Lucyna Mazur", "Natalia Piotrowska"],
-            "Dostępność Pon": ["12:00-16:00", "13:00-17:00", "", "11:00-15:00"],
-            "Dostępność Wt": ["12:00-16:00", "", "13:00-17:00", "11:00-15:00"],
-            "Dostępność Śr": ["12:00-16:00", "13:00-17:00", "13:00-17:00", ""],
-            "Dostępność Czw": ["12:00-16:00", "", "13:00-17:00", "11:00-15:00"],
-            "Dostępność Pt": ["12:00-16:00", "13:00-17:00", "", "11:00-15:00"]
-        })
-        df_opiekunki.to_excel(writer, sheet_name="Opiekunki", index=False)
-        
-        # Arkusz 6: Trasy i Czas Dojazdów
-        df_trasy = pd.DataFrame({
-            "Punkt Początkowy": ["SP nr 1", "Przedszkole nr 5", "SP nr 2", "Przedszkole nr 2", "LO nr 1", "LO nr 2", "LO nr 3"],
-            "Punkt Końcowy": ["Komorów", "Michałowice", "Ursus 1", "Pruszków", "Nowa Wieś", "Ursus 2", "Komorów"],
-            "Czas Przejścia (min)": [15, 10, 20, 10, 25, 15, 20]
-        })
-        df_trasy.to_excel(writer, sheet_name="Trasy", index=False)
-
-        # Dopasowanie szerokości kolumn
-        for sheetname in writer.sheets:
-            worksheet = writer.sheets[sheetname]
-            for col in worksheet.columns:
-                max_length = 0
-                column = col[0].column_letter
-                for cell in col:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                worksheet.column_dimensions[column].width = (max_length + 3)
-                
-    return output.getvalue()
-
-st.subheader("1. Pobierz szablon")
-excel_data = generate_excel_template()
-st.download_button(
-    label="📥 Pobierz układacz grafików (Excel)",
-    data=excel_data,
-    file_name="ukladacz_grafikow.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-st.subheader("2. Wgraj uzupełniony plik")
-uploaded_file = st.file_uploader("Wrzuć z powrotem wypełniony plik Excel", type=["xlsx"])
-
-if uploaded_file is not None:
-    st.success("Plik wgrany poprawnie! Trwa analiza zapotrzebowania...")
-    
-    # Wczytywanie pliku Excel
-    xls = pd.ExcelFile(uploaded_file)
-    
-    # Wczytywanie z zabezpieczeniem, jeśli ktoś wrzuci starszą wersję pliku bez kolumny czasu
-    df_mlodsze = pd.read_excel(xls, sheet_name="Młodsze Dzieci")
-    if "Czas trwania (min)" not in df_mlodsze.columns:
-        df_mlodsze.insert(3, "Czas trwania (min)", 60)
-        
-    df_starsi = pd.read_excel(xls, sheet_name="Starsi Uczniowie")
-    if "Czas trwania (min)" not in df_starsi.columns:
-        df_starsi.insert(4, "Czas trwania (min)", 90)
-        
-    df_sale = pd.read_excel(xls, sheet_name="Sale")
-    
-    st.header("Krok 1: Weryfikacja i formowanie grup")
-    
-    # ---------------- BOKS: BUFORY CZASU NA DOJAZD ----------------
-    st.subheader("Bufory czasu na dojazd ze szkoły (wg filii)")
-    st.write("Ustaw indywidualny czas, jakiego potrzebują dzieci na dotarcie do konkretnej placówki z okolicznej szkoły publicznej:")
-    
-    filie_unikalne = sorted(df_sale["Filia"].dropna().unique())
-    bufory_filii = {}
-    
-    # Rozkładamy suwaki dynamicznie w 3 kolumnach dla estetyki
-    cols_bufory = st.columns(3)
-    for idx, filia in enumerate(filie_unikalne):
-        with cols_bufory[idx % 3]:
-            bufory_filii[filia] = st.slider(f"Bufor - {filia} (min)", min_value=15, max_value=60, value=30, step=5, key=f"bufor_{filia}")
-            
-    # ---------------- BOKS: MŁODSZE DZIECI ----------------
-    st.markdown("---")
-    st.subheader("Młodsze Dzieci (0-3 i przedszkole) - Edycja grup")
-    st.write("Kliknij dwukrotnie w wybraną komórkę, aby zmienić czas trwania zajęć lub inne parametry wyłącznie dla konkretnej grupy.")
-    
-    # Interaktywna tabela
-    edytowane_mlodsze = st.data_editor(df_mlodsze, use_container_width=True, num_rows="dynamic", key="editor_mlodsze")
-
-    # ---------------- BOKS: STARSI UCZNIOWIE ----------------
-    st.markdown("---")
-    st.subheader("Starsi Uczniowie (klasy 4-8, Licea) - Selekcja i Edycja")
-    
-    # Logika weryfikacji liczebności grup
-    grupy_odrzucone = df_starsi[df_starsi["Liczba Chętnych"] < 5]
-    grupy_ostrzezenie = df_starsi[df_starsi["Liczba Chętnych"] == 5]
-    grupy_zatwierdzone = df_starsi[df_starsi["Liczba Chętnych"] >= 6]
-    
-    if not grupy_odrzucone.empty:
-        st.error(f"Odrzucono {len(grupy_odrzucone)} klas z powodu braku wymaganej liczby chętnych (poniżej 5 osób).")
-        with st.expander("Rozwiń listę odrzuconych klas (do wglądu)"):
-            st.dataframe(grupy_odrzucone, use_container_width=True)
-            
-    # Połączenie zatwierdzonych i tych z ostrzeżeniem jako naszej bazy do układania grafiku
-    aktywne_grupy_starsi = pd.concat([grupy_zatwierdzone, grupy_ostrzezenie]).reset_index(drop=True)
-    
-    st.success(f"Zakwalifikowano {len(aktywne_grupy_starsi)} klas do układania grafiku (w tym {len(grupy_ostrzezenie)} z ostrzeżeniami o małej liczebności).")
-    
-    st.write("Kliknij dwukrotnie w komórkę poniżej, aby zmienić **Czas trwania (min)** lub docelową filię dla wybranej grupy.")
-    
-    # Interaktywna tabela
-    edytowane_starsi = st.data_editor(aktywne_grupy_starsi, use_container_width=True, num_rows="dynamic", key="editor_starsi")
+                    "Poziom": str(klasa_num), "Liczba Chętnych": random.randint(0, 10), "
