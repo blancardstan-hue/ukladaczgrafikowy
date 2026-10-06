@@ -16,7 +16,6 @@ def generate_excel_template():
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         
-        # 1. Lektorzy (70 UNIKALNYCH)
         imiona = [
             "Anna", "Maria", "Katarzyna", "Małgorzata", "Agnieszka", "Ewa", "Magdalena", 
             "Julia", "Zofia", "Hanna", "Jan", "Piotr", "Krzysztof", "Andrzej", "Tomasz", 
@@ -31,7 +30,10 @@ def generate_excel_template():
         kombinacje = [f"{i} {n}" for i in imiona for n in nazwiska]
         wybrani = random.sample(kombinacje, 70)
         
-        godziny_lek = ["14:00-20:00", "13:00-19:00", "15:00-20:00", "08:00-12:00,15:00-19:00", "14:30-18:30", ""]
+        godziny_lek = [
+            "14:00-20:00", "13:00-19:00", "15:00-20:00", 
+            "08:00-12:00,15:00-19:00", "14:30-18:30", ""
+        ]
         filie = ["Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2", "Nowa Wieś"]
         poziomy_opcje = [
             "3-5 lat, 0, 1, 2, 3", 
@@ -40,9 +42,9 @@ def generate_excel_template():
         ]
         
         lektorzy_data = []
-        for i, nazwa in enumerate(wybrani, 1):
+        for nazwa in wybrani:
             lektorzy_data.append({
-                "Lektor": f"{nazwa} (L{i})",
+                "Lektor": nazwa,
                 "Dostępność Pon": random.choice(godziny_lek),
                 "Dostępność Wt": random.choice(godziny_lek),
                 "Dostępność Śr": random.choice(godziny_lek),
@@ -54,15 +56,15 @@ def generate_excel_template():
             
         pd.DataFrame(lektorzy_data).to_excel(writer, sheet_name="Lektorzy", index=False)
         
-        # 2. Sale
         sale_data = []
         for f in filie:
             for i in range(1, 6):
-                prz = "3-5 lat, 0, 1, 2, 3" if i == 1 else "4, 5, 6, 7, 8, Masters" if i == 2 else "Wszystkie"
+                if i == 1: prz = "3-5 lat, 0, 1, 2, 3"
+                elif i == 2: prz = "4, 5, 6, 7, 8, Masters"
+                else: prz = "Wszystkie"
                 sale_data.append({"Nazwa Sali": str(i), "Filia": f, "Przeznaczenie": prz})
         pd.DataFrame(sale_data).to_excel(writer, sheet_name="Sale", index=False)
         
-        # Konfiguracja Szkół
         szkoly_sp = {
             "Komorów": ["SP Komorów"], "Michałowice": ["SP Michałowice"],
             "Pruszków": ["SP nr 1 Pruszków", "SP nr 2 Pruszków"],
@@ -73,12 +75,12 @@ def generate_excel_template():
         godziny_pocz = ["08:00", "08:55", "09:50"]
         godziny_kon = ["12:30", "13:30", "14:25", "15:20", "16:15"]
 
-        # 3. Młodsze Dzieci
         mlodsze_data = []
         for f, szkoly in szkoly_sp.items():
             for idx, sz in enumerate(szkoly):
                 mlodsze_data.append({
-                    "Nazwa Grupy": f"Zerówka {idx+1}", "Poziom": "0", "Liczba Dzieci": random.randint(6, 12),
+                    "Nazwa Grupy": f"Zerówka {idx+1}", "Poziom": "0", 
+                    "Liczba Dzieci": random.randint(6, 12),
                     "Czas trwania (min)": 60, "Skąd Odbiór": sz, "Docelowa Filia": f,
                     "Początek Szkoły Pon": "08:00", "Koniec Szkoły Pon": "12:30",
                     "Początek Szkoły Wt": "08:00", "Koniec Szkoły Wt": "12:30",
@@ -89,7 +91,6 @@ def generate_excel_template():
                 })
         pd.DataFrame(mlodsze_data).to_excel(writer, sheet_name="Młodsze Dzieci", index=False)
         
-        # 4. Starsi Uczniowie
         starsi_data = []
         for f, szkoly in szkoly_sp.items():
             for sz in szkoly:
@@ -99,18 +100,25 @@ def generate_excel_template():
                             "Szkoła i Klasa": f"{sz} - Klasa {kl}{lit}", "Poziom": str(kl), 
                             "Liczba Chętnych": random.randint(0, 8), "Czas trwania (min)": 90, 
                             "Docelowa Filia": f,
-                            "Początek Szkoły Pon": random.choice(godziny_pocz), "Koniec Szkoły Pon": random.choice(godziny_kon),
-                            "Początek Szkoły Wt": random.choice(godziny_pocz), "Koniec Szkoły Wt": random.choice(godziny_kon),
-                            "Początek Szkoły Śr": random.choice(godziny_pocz), "Koniec Szkoły Śr": random.choice(godziny_kon),
-                            "Początek Szkoły Czw": random.choice(godziny_pocz), "Koniec Szkoły Czw": random.choice(godziny_kon),
-                            "Początek Szkoły Pt": random.choice(godziny_pocz), "Koniec Szkoły Pt": random.choice(godziny_kon)
+                            "Początek Szkoły Pon": random.choice(godziny_pocz), 
+                            "Koniec Szkoły Pon": random.choice(godziny_kon),
+                            "Początek Szkoły Wt": random.choice(godziny_pocz), 
+                            "Koniec Szkoły Wt": random.choice(godziny_kon),
+                            "Początek Szkoły Śr": random.choice(godziny_pocz), 
+                            "Koniec Szkoły Śr": random.choice(godziny_kon),
+                            "Początek Szkoły Czw": random.choice(godziny_pocz), 
+                            "Koniec Szkoły Czw": random.choice(godziny_kon),
+                            "Początek Szkoły Pt": random.choice(godziny_pocz), 
+                            "Koniec Szkoły Pt": random.choice(godziny_kon)
                         })
+                        
         for f, szkoly in szkoly_lo.items():
             for sz in szkoly:
                 for kl in range(1, 5):
                     for lit in ['A', 'B', 'C', 'D'][:random.randint(2, 4)]:
                         starsi_data.append({
-                            "Szkoła i Klasa": f"{sz} - Klasa {kl}{lit}", "Poziom": "Masters", 
+                            "Szkoła i Klasa": f"{sz} - Klasa {kl}{lit}", 
+                            "Poziom": str(kl + 8), 
                             "Liczba Chętnych": random.randint(0, 8), "Czas trwania (min)": 90, 
                             "Docelowa Filia": f,
                             "Początek Szkoły Pon": "08:00", "Koniec Szkoły Pon": "15:20",
@@ -121,7 +129,6 @@ def generate_excel_template():
                         })
         pd.DataFrame(starsi_data).to_excel(writer, sheet_name="Starsi Uczniowie", index=False)
         
-        # 5. Opiekunki (Z filiami)
         pd.DataFrame({
             "Imię Opiekunki": ["Marta", "Krystyna", "Zofia", "Ewa", "Agnieszka", "Magda"],
             "Filia": ["Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2", "Nowa Wieś"],
@@ -130,10 +137,10 @@ def generate_excel_template():
             "Dostępność Pt": ["12:00-18:00"]*6
         }).to_excel(writer, sheet_name="Opiekunki", index=False)
         
-        # 6. Trasy
         trasy_data = []
         for f, szkoly in szkoly_sp.items():
-            for sz in szkoly: trasy_data.append({"Początek": sz, "Koniec": f, "Czas (min)": random.choice([10, 15, 20])})
+            for sz in szkoly: 
+                trasy_data.append({"Początek": sz, "Koniec": f, "Czas (min)": random.choice([10, 15, 20])})
         pd.DataFrame(trasy_data).to_excel(writer, sheet_name="Trasy", index=False)
 
         for sheetname in writer.sheets:
@@ -172,16 +179,16 @@ def parse_availability(avail_str):
         except: pass
     return blocks
 
-def is_overlap(st1, en1, st2, en2):
-    return max(st1, st2) < min(en1, en2)
+def is_overlap(st1, en1, st2, en2, gap=0):
+    return max(st1, st2 - gap) < min(en1, en2 + gap)
 
 def score_combo(combo):
     if len(combo) == 1: return 1
     if len(combo) == 2:
         diff = abs(dni_short.index(combo[0]) - dni_short.index(combo[1]))
-        if diff in [2, 4]: return 1  # Pon-Śr, Wt-Czw, Śr-Pt, Pon-Pt
-        elif diff == 3: return 2     # Pon-Czw, Wt-Pt
-        elif diff == 1: return 3     # Dzień po dniu (bardzo nie lubiane)
+        if diff in [2, 4]: return 1
+        elif diff == 3: return 2
+        elif diff == 1: return 3
         return 10
     return 1
 
@@ -193,27 +200,51 @@ def get_scored_combos(avail_dict, spotkan):
     scored.sort(key=lambda x: x[1]) 
     return [x[0] for x in scored]
 
-def get_color_map(unique_vals):
-    colors = [
-        "#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", 
-        "#a0c4ff", "#bdb2ff", "#ffc6ff", "#fbb1bd", "#e2ece9",
-        "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4"
+def check_lektor(lek, d, st_m, en_m, grafik, gap):
+    can_work = any(b_s <= st_m and b_e >= en_m for (b_s, b_e) in lek["Avail"][d])
+    if not can_work: return False
+    
+    zajety = any(
+        g["Lektor"] == lek["Lektor"] and g["Dzień"] == d and 
+        is_overlap(st_m, en_m, g["Start"], g["End"], gap) 
+        for g in grafik
+    )
+    return not zajety
+
+def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap):
+    dostepne = [
+        s["Sala"] for s in sale_dane 
+        if s["Filia"] == filia and 
+        (poziom in s["Poziomy"] or "Wszystkie" in s["Poziomy"])
     ]
-    cmap = {}
-    idx = 0
-    for val in unique_vals:
-        if val == "-" or pd.isna(val): 
-            cmap[val] = ""
-        else: 
-            cmap[val] = f"background-color: {colors[idx % len(colors)]}; color: #000000; font-weight: bold;"
-            idx += 1
-    return cmap
+    for s in dostepne:
+        zajeta = any(
+            g["Sala"] == s and g["Dzień"] == d and g["Filia"] == filia and 
+            is_overlap(st_m, en_m, g["Start"], g["End"], gap) 
+            for g in grafik
+        )
+        if not zajeta: return s
+    return None
+
+colors_pool = [
+    "#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", 
+    "#a0c4ff", "#bdb2ff", "#ffc6ff", "#fbb1bd", "#e2ece9",
+    "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4",
+    "#fbc4ab", "#f08080", "#84a59d", "#f6bd60", "#f7ede2"
+]
+
+def style_cell_with_cmap(val, cmap):
+    if val == "-" or pd.isna(val): return ""
+    for k, color in cmap.items():
+        if f"({k})" in str(val) or str(val).startswith(k):
+            return color
+    return ""
 
 # ==========================================
 # INTERFEJS GŁÓWNY
 # ==========================================
 st.subheader("1. Pobierz szablon")
-st.download_button("📥 Pobierz układacz (Excel)", data=generate_excel_template(), file_name="ukladacz.xlsx")
+st.download_button("📥 Pobierz układacz", data=generate_excel_template(), file_name="ukladacz.xlsx")
 
 st.subheader("2. Wgraj uzupełniony plik")
 uploaded_file = st.file_uploader("Wgraj plik Excel", type=["xlsx"])
@@ -226,17 +257,20 @@ if uploaded_file is not None:
     df_opiekunki = pd.read_excel(xls, "Opiekunki") if "Opiekunki" in xls.sheet_names else pd.DataFrame()
     
     df_mlodsze = pd.read_excel(xls, "Młodsze Dzieci")
-    if "Czas trwania (min)" not in df_mlodsze.columns: df_mlodsze.insert(3, "Czas trwania (min)", 60)
+    if "Czas trwania (min)" not in df_mlodsze.columns: 
+        df_mlodsze.insert(3, "Czas trwania (min)", 60)
     
     df_starsi = pd.read_excel(xls, "Starsi Uczniowie")
-    if "Czas trwania (min)" not in df_starsi.columns: df_starsi.insert(4, "Czas trwania (min)", 90)
+    if "Czas trwania (min)" not in df_starsi.columns: 
+        df_starsi.insert(4, "Czas trwania (min)", 90)
 
     st.header("Krok 1: Formowanie")
     filie_unikalne = sorted(df_sale["Filia"].dropna().unique())
     bufory_filii = {}
     cols_bufory = st.columns(3)
     for idx, f in enumerate(filie_unikalne):
-        with cols_bufory[idx % 3]: bufory_filii[f] = st.slider(f"{f} (min)", 15, 60, 30, 5, key=f"b_{f}")
+        with cols_bufory[idx % 3]: 
+            bufory_filii[f] = st.slider(f"{f} (min)", 15, 60, 30, 5, key=f"b_{f}")
             
     st.markdown("---")
     st.write("**Młodsze Dzieci**")
@@ -255,7 +289,12 @@ if uploaded_file is not None:
     df_s["Litera"] = df_s["Szkoła i Klasa"].apply(ext_lit)
     
     for d in dni_kon: df_s[d + "_mins"] = df_s[d].apply(time_to_mins)
-    df_s["Avg_Time"] = df_s.apply(lambda r: sum([r[d+"_mins"] for d in dni_kon if r[d+"_mins"]>0]) / max(1, len([r[d+"_mins"] for d in dni_kon if r[d+"_mins"]>0])), axis=1)
+    
+    def avg_t(r):
+        vals = [r[d+"_mins"] for d in dni_kon if r[d+"_mins"]>0]
+        return sum(vals)/max(1, len(vals)) if vals else 0
+        
+    df_s["Avg_Time"] = df_s.apply(avg_t, axis=1)
 
     utworzone_g = []
     for _, g_df in df_s.groupby(["Docelowa Filia", "Szkoła", "Poziom"]):
@@ -302,10 +341,11 @@ if uploaded_file is not None:
             
             czas_tras = {f"{r['Początek']}_{r['Koniec']}": r["Czas (min)"] for _, r in df_trasy.iterrows()}
             
-            # Parsowanie Lektorów i Opiekunek
             lektorzy_dane = []
             for _, r in df_lektorzy.iterrows():
                 l_poziomy = [p.strip() for p in str(r["Poziomy"]).split(",")] if pd.notna(r["Poziomy"]) else []
+                if "Masters" in l_poziomy: l_poziomy.extend(["9", "10", "11", "12"])
+                    
                 l_filie = [f.strip() for f in str(r["Filie"]).split(",")] if pd.notna(r["Filie"]) else []
                 avail = {dni_short[i]: parse_availability(r.get(f"Dostępność {dni_short[i]}", "")) for i in range(5)}
                 lektorzy_dane.append({"Lektor": r["Lektor"], "Poziomy": l_poziomy, "Filie": l_filie, "Avail": avail})
@@ -316,11 +356,13 @@ if uploaded_file is not None:
                     avail = {dni_short[i]: parse_availability(r.get(f"Dostępność {dni_short[i]}", "")) for i in range(5)}
                     opiekunki_dane.append({"Imię": r["Imię Opiekunki"], "Filia": r.get("Filia", ""), "Avail": avail})
 
-            sale_dane = [{"Sala": str(r["Nazwa Sali"]), "Filia": r["Filia"], "Poziomy": [p.strip() for p in str(r["Przeznaczenie"]).split(",")]} for _, r in df_sale.iterrows()]
+            sale_dane = []
+            for _, r in df_sale.iterrows():
+                s_poz = [p.strip() for p in str(r["Przeznaczenie"]).split(",")] if pd.notna(r["Przeznaczenie"]) else []
+                if "Masters" in s_poz: s_poz.extend(["9", "10", "11", "12"])
+                sale_dane.append({"Sala": str(r["Nazwa Sali"]), "Filia": r["Filia"], "Poziomy": s_poz})
                 
-            # Budowa zadań z oknami przed szkołą i po szkole
             zadania = []
-            
             def zbuduj_okna(r, typ):
                 av_windows = {}
                 do = str(r["Docelowa Filia"])
@@ -330,8 +372,8 @@ if uploaded_file is not None:
                     st_sz = time_to_mins(r.get(d_p, ""))
                     en_sz = time_to_mins(r.get(d_k, ""))
                     windows = []
-                    if st_sz > 0: windows.append((480, max(480, st_sz - bufor))) # Przed szkołą
-                    if en_sz > 0: windows.append((en_sz + bufor, 1050 if typ == "Młodsza" else 1230)) # Po szkole
+                    if st_sz > 0: windows.append((480, max(480, st_sz - bufor)))
+                    if en_sz > 0: windows.append((en_sz + bufor, 1050 if typ == "Młodsza" else 1230))
                     if windows: av_windows[dni_short[idx]] = windows
                 return av_windows
 
@@ -341,79 +383,82 @@ if uploaded_file is not None:
             for _, r in edyt_starsi.iterrows():
                 zadania.append({"Grupa": r["Nazwa Grupy"], "Poziom": str(r["Poziom"]), "Filia": str(r["Docelowa Filia"]), "Czas": r["Czas trwania (min)"], "Spotkań": int(r.get("Liczba Spotkań", 2)), "Typ": "Starsza", "Odbiór": "", "Windows": zbuduj_okna(r, "Starsza")})
                 
-            # Sortowanie zadań: Najtrudniejsze pierwsze
             zadania.sort(key=lambda x: (len(x["Windows"]), -x["Czas"]))
             
             for zad in zadania:
                 combos = get_scored_combos(zad["Windows"], zad["Spotkań"])
                 znaleziono = False
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
-                
-                # Strategia wieku: 0=Najwcześniej, 1=Środek, 2=Najpóźniej
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
-                for combo in combos:
-                    for lek in valid_leks:
-                        zaplanowane_dni = []
-                        
-                        for d in combo:
-                            # Wyciągamy wszystkie sloty ze wszystkich okien tego dnia
-                            sloty = []
-                            for win_st, win_en in zad["Windows"][d]:
-                                st_test = win_st + (5 - win_st % 5) if win_st % 5 != 0 else win_st
-                                while st_test + zad["Czas"] <= win_en:
-                                    sloty.append(st_test)
-                                    st_test += 5
-                                    
-                            if waga == 0: sloty.sort()
-                            elif waga == 2: sloty.sort(reverse=True)
+                # DWUETAPOWY START: Najpierw 10 min przerwy, potem 5 min przerwy
+                for gap_pref in [10, 5]:
+                    if znaleziono: break
+                    
+                    for combo in combos:
+                        if znaleziono: break
+                        for lek in valid_leks:
+                            if znaleziono: break
                             
-                            dzien_ok = False
-                            for st_m in sloty:
-                                en_m = st_m + zad["Czas"]
+                            zaplanowane_dni = []
+                            for d in combo:
+                                sloty = []
+                                for win_st, win_en in zad["Windows"][d]:
+                                    st_test = win_st + (5 - win_st % 5) if win_st % 5 != 0 else win_st
+                                    while st_test + zad["Czas"] <= win_en:
+                                        sloty.append(st_test)
+                                        st_test += 5
+                                        
+                                if waga == 0: sloty.sort()
+                                elif waga == 2: sloty.sort(reverse=True)
                                 
-                                # Sprawdzenie lektora
-                                if any(b_s <= st_m and b_e >= en_m for (b_s, b_e) in lek["Avail"][d]) and not any(g["Lektor"] == lek["Lektor"] and g["Dzień"] == d and is_overlap(st_m, en_m, g["Start"], g["End"] + 5) for g in grafik):
+                                dzien_ok = False
+                                for st_m in sloty:
+                                    en_m = st_m + zad["Czas"]
                                     
-                                    # Sprawdzenie sali
-                                    sala = next((s["Sala"] for s in sale_dane if s["Filia"] == zad["Filia"] and (zad["Poziom"] in s["Poziomy"] or "Wszystkie" in s["Poziomy"]) and not any(g["Sala"] == s["Sala"] and g["Dzień"] == d and g["Filia"] == zad["Filia"] and is_overlap(st_m, en_m, g["Start"], g["End"]) for g in grafik)), None)
-                                    
-                                    if sala:
-                                        # Sprawdzenie Opiekunek
-                                        op_przyp, op_odp = "", ""
-                                        moze_isc = True
+                                    if check_lektor(lek, d, st_m, en_m, grafik, gap_pref):
+                                        sala = check_sala(zad["Filia"], zad["Poziom"], d, st_m, en_m, grafik, sale_dane, gap_pref)
                                         
-                                        if zad["Typ"] == "Młodsza" and zad["Odbiór"]:
-                                            trasa = czas_tras.get(f"{zad['Odbiór']}_{zad['Filia']}", 15)
-                                            # Szukaj kogoś na start
-                                            for op in opiekunki_dane:
-                                                if op["Filia"] == zad["Filia"] and any(b_s <= (st_m - trasa) and b_e >= st_m for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(st_m-trasa, st_m, g["Start"], g["End"]) for g in grafik_op):
-                                                    op_przyp = op["Imię"]; break
-                                            # Szukaj kogoś na koniec
-                                            for op in opiekunki_dane:
-                                                if op["Filia"] == zad["Filia"] and any(b_s <= en_m and b_e >= (en_m + trasa) for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(en_m, en_m+trasa, g["Start"], g["End"]) for g in grafik_op):
-                                                    op_odp = op["Imię"]; break
+                                        if sala:
+                                            op_przyp, op_odp = "", ""
+                                            moze_isc = True
                                             
-                                            if not op_przyp or not op_odp: moze_isc = False
-                                        
-                                        if moze_isc:
-                                            if op_przyp: grafik_op.extend([{"Opiekunka": op_przyp, "Dzień": d, "Start": st_m-trasa, "End": st_m}, {"Opiekunka": op_odp, "Dzień": d, "Start": en_m, "End": en_m+trasa}])
+                                            if zad["Typ"] == "Młodsza" and zad["Odbiór"]:
+                                                trasa = czas_tras.get(f"{zad['Odbiór']}_{zad['Filia']}", 15)
+                                                for op in opiekunki_dane:
+                                                    if op["Filia"] == zad["Filia"] and any(b_s <= (st_m - trasa) and b_e >= st_m for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(st_m-trasa, st_m, g["Start"], g["End"], 0) for g in grafik_op):
+                                                        op_przyp = op["Imię"]; break
+                                                for op in opiekunki_dane:
+                                                    if op["Filia"] == zad["Filia"] and any(b_s <= en_m and b_e >= (en_m + trasa) for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(en_m, en_m+trasa, g["Start"], g["End"], 0) for g in grafik_op):
+                                                        op_odp = op["Imię"]; break
+                                                
+                                                if not op_przyp or not op_odp: moze_isc = False
                                             
-                                            zaplanowane_dni.append({
-                                                "Grupa": zad["Grupa"], "Poziom": zad["Poziom"], "Filia": zad["Filia"],
-                                                "Dzień": d, "Start": st_m, "End": en_m, "Sala": sala, "Lektor": lek["Lektor"],
-                                                "Op_Str": f"\n🚶 {op_przyp} ➡️ | ⬅️ {op_odp}" if op_przyp else ""
-                                            })
-                                            dzien_ok = True
-                                            break # Sukces dla tego dnia
-                            
-                            if not dzien_ok: break # Przerwij combo
-                            
-                        if len(zaplanowane_dni) == len(combo):
-                            grafik.extend(zaplanowane_dni)
-                            znaleziono = True
-                            break 
-                    if znaleziono: break 
+                                            if moze_isc:
+                                                op_str_format = ""
+                                                if op_przyp: 
+                                                    grafik_op.extend([
+                                                        {"Opiekunka": op_przyp, "Dzień": d, "Start": st_m-trasa, "End": st_m}, 
+                                                        {"Opiekunka": op_odp, "Dzień": d, "Start": en_m, "End": en_m+trasa}
+                                                    ])
+                                                    c_p = f"{mins_to_time(st_m-trasa)}-{mins_to_time(st_m)}"
+                                                    c_o = f"{mins_to_time(en_m)}-{mins_to_time(en_m+trasa)}"
+                                                    o_odb = zad["Odbiór"]
+                                                    op_str_format = f"\n🚶 Przyprowadza: {op_przyp} ({c_p}) z: {o_odb}\n🚶 Odprowadza: {op_odp} ({c_o}) do: {o_odb}"
+                                                
+                                                zaplanowane_dni.append({
+                                                    "Grupa": zad["Grupa"], "Poziom": zad["Poziom"], "Filia": zad["Filia"],
+                                                    "Dzień": d, "Start": st_m, "End": en_m, "Sala": sala, "Lektor": lek["Lektor"],
+                                                    "Op_Str": op_str_format
+                                                })
+                                                dzien_ok = True
+                                                break 
+                                if not dzien_ok: break 
+                                
+                            if len(zaplanowane_dni) == len(combo):
+                                grafik.extend(zaplanowane_dni)
+                                znaleziono = True
+                                break 
                 
                 if not znaleziono:
                     nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak wspólnego zasobu na dopasowane bloki"})
@@ -428,28 +473,54 @@ if uploaded_file is not None:
                 st.success("🎉 Sukces! Przypisano wszystkie grupy!")
                 
             st.subheader("Wizualizacja Grafiku")
-            tabs = st.tabs(filie_unikalne)
+            
+            widok_opcja = st.radio("Perspektywa:", ["Według Filii (Zarządzanie salami)", "Według Lektorów (Indywidualnie)"], horizontal=True)
             df_grafik = pd.DataFrame(grafik)
             
-            for idx, tab in enumerate(tabs):
-                f_nazwa = filie_unikalne[idx]
-                with tab:
-                    if not df_grafik.empty:
-                        df_f = df_grafik[df_grafik["Filia"] == f_nazwa].copy()
-                        if not df_f.empty:
-                            df_f["Godzina"] = df_f["Start"].apply(mins_to_time) + " - " + df_f["End"].apply(mins_to_time)
-                            df_f["Wpis"] = df_f["Grupa"] + " (" + df_f["Lektor"] + ")" + df_f["Op_Str"]
-                            df_f["Dzień"] = pd.Categorical(df_f["Dzień"], categories=dni_short, ordered=True)
-                            
-                            pivot = df_f.pivot_table(index=["Dzień", "Godzina"], columns="Sala", values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
-                            
-                            # Kolorowanie
-                            uniq = list(set(pivot.values.flatten()))
-                            cmap = get_color_map(uniq)
-                            
-                            try: styled = pivot.style.map(lambda x: cmap.get(x, ""))
-                            except: styled = pivot.style.applymap(lambda x: cmap.get(x, ""))
-                            
-                            st.dataframe(styled, use_container_width=True)
-                        else: st.info(f"Brak zajęć dla {f_nazwa}.")
-                    else: st.info("Grafik pusty.")
+            if widok_opcja == "Według Filii (Zarządzanie salami)":
+                tabs = st.tabs(filie_unikalne)
+                for idx, tab in enumerate(tabs):
+                    f_nazwa = filie_unikalne[idx]
+                    with tab:
+                        if not df_grafik.empty:
+                            df_f = df_grafik[df_grafik["Filia"] == f_nazwa].copy()
+                            if not df_f.empty:
+                                df_f["Godzina"] = df_f["Start"].apply(mins_to_time) + " - " + df_f["End"].apply(mins_to_time)
+                                df_f["Wpis"] = df_f["Grupa"] + " (" + df_f["Lektor"] + ")" + df_f["Op_Str"]
+                                df_f["Dzień"] = pd.Categorical(df_f["Dzień"], categories=dni_short, ordered=True)
+                                
+                                pivot = df_f.pivot_table(index=["Godzina"], columns=["Dzień", "Sala"], values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
+                                
+                                # Kolorowanie per lektor wewnątrz danej filii
+                                uniq_leks = df_f["Lektor"].unique()
+                                cmap = {lek: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, lek in enumerate(uniq_leks)}
+                                
+                                try: styled = pivot.style.map(lambda x: style_cell_with_cmap(x, cmap))
+                                except: styled = pivot.style.applymap(lambda x: style_cell_with_cmap(x, cmap))
+                                
+                                st.dataframe(styled, use_container_width=True)
+                            else: st.info(f"Brak zajęć dla {f_nazwa}.")
+                        else: st.info("Grafik pusty.")
+                        
+            else:
+                if not df_grafik.empty:
+                    lektorzy_z_grafiku = sorted(df_grafik["Lektor"].unique())
+                    wybrany_lek = st.selectbox("Wybierz lektora do podglądu:", lektorzy_z_grafiku)
+                    
+                    df_lek = df_grafik[df_grafik["Lektor"] == wybrany_lek].copy()
+                    df_lek["Godzina"] = df_lek["Start"].apply(mins_to_time) + " - " + df_lek["End"].apply(mins_to_time)
+                    df_lek["Wpis"] = df_lek["Grupa"] + "\n📍 " + df_lek["Filia"] + " (Sala " + df_lek["Sala"] + ")"
+                    df_lek["Dzień"] = pd.Categorical(df_lek["Dzień"], categories=dni_short, ordered=True)
+                    
+                    pivot_lek = df_lek.pivot_table(index=["Godzina"], columns="Dzień", values="Wpis", aggfunc=lambda x: " | ".join(x)).fillna("-")
+                    
+                    # Kolorowanie po grupie w widoku Lektora
+                    uniq_g = df_lek["Grupa"].unique()
+                    cmap_l = {g: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, g in enumerate(uniq_g)}
+                    
+                    try: styled_lek = pivot_lek.style.map(lambda x: style_cell_with_cmap(x, cmap_l))
+                    except: styled_lek = pivot_lek.style.applymap(lambda x: style_cell_with_cmap(x, cmap_l))
+                    
+                    st.dataframe(styled_lek, use_container_width=True)
+                else:
+                    st.info("Grafik pusty.")
