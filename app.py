@@ -228,9 +228,17 @@ colors_pool = [
 
 def style_cell_with_cmap(val, cmap):
     if val == "-" or pd.isna(val) or val == "": return ""
+    
+    val_str = str(val)
+    is_cont = val_str.startswith("~")
+    check_val = val_str.replace("~", "")
+    
     for k, color in cmap.items():
-        if f"({k})" in str(val) or str(val).startswith(k):
-            return color
+        if f"({k})" in check_val or check_val.startswith(k):
+            if is_cont:
+                # Ukrywamy tekst sprytnym zabiegiem CSS dla Streamlita
+                return f"background-color: {color}; color: transparent;"
+            return f"background-color: {color}; color: #000000; font-weight: bold;"
     return ""
 
 def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
@@ -256,11 +264,16 @@ def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
         wpis = f"{mins_to_time(st_m)}-{mins_to_time(en_m)}\n{row['Grupa']} ({row['Lektor']}){row.get('Op_Str', '')}"
         
         if d in dni_short and s in sale_w_filii:
+            first_block = True
             for i, (win_st, win_en) in enumerate(time_intervals):
                 if st_m < win_en and en_m > win_st:
+                    # Ukrywanie powielonego tekstu (dodajemy znaczek tyldy, by zidentyfikować duplikat)
+                    current_wpis = wpis if first_block else "~" + wpis
+                    first_block = False
+                    
                     current_val = df_grid.at[idx_labels[i], (d, s)]
-                    if current_val: df_grid.at[idx_labels[i], (d, s)] = current_val + " | \n" + wpis
-                    else: df_grid.at[idx_labels[i], (d, s)] = wpis
+                    if current_val: df_grid.at[idx_labels[i], (d, s)] = current_val + " | \n" + current_wpis
+                    else: df_grid.at[idx_labels[i], (d, s)] = current_wpis
                         
     return df_grid
 
@@ -277,14 +290,18 @@ def generate_grid_for_lektor(df_lek):
         d = row["Dzień"]
         st_m = row["Start"]
         en_m = row["End"]
-        wpis = f"{mins_to_time(st_m)}-{mins_to_time(en_m)}\n{row['Grupa']}\n📍 {row['Filia']} (S: {row['Sala']})"
+        wpis = f"{mins_to_time(st_m)}-{mins_to_time(en_m)}\n{row['Grupa']}\n📍 {row['Filia']} (Sala: {row['Sala']})"
         
         if d in dni_short:
+            first_block = True
             for i, (win_st, win_en) in enumerate(time_intervals):
                 if st_m < win_en and en_m > win_st:
+                    current_wpis = wpis if first_block else "~" + wpis
+                    first_block = False
+                    
                     current_val = df_grid.at[idx_labels[i], d]
-                    if current_val: df_grid.at[idx_labels[i], d] = current_val + " | \n" + wpis
-                    else: df_grid.at[idx_labels[i], d] = wpis
+                    if current_val: df_grid.at[idx_labels[i], d] = current_val + " | \n" + current_wpis
+                    else: df_grid.at[idx_labels[i], d] = current_wpis
                     
     return df_grid
 
@@ -293,16 +310,16 @@ def create_excel_download(grafiki_dict):
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         for nazwa, styled_df in grafiki_dict.items():
             sheet_name = nazwa[:31] 
-            # Zapisz OSTYLOWANY dataframe bezpośrednio do Excela!
             styled_df.to_excel(writer, sheet_name=sheet_name)
             ws = writer.sheets[sheet_name]
             
-            # Włączenie zawijania tekstu i centrowania dla czytelności z multi-indexem
             for row in ws.iter_rows():
                 for cell in row:
                     cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
+                    # W Excelu po prostu czyścimy zawartość ukrytych komórek (kolor tła i tak przetrwa z styled_df)
+                    if isinstance(cell.value, str) and cell.value.startswith("~"):
+                        cell.value = ""
             
-            # Bezpieczne ustawianie szerokości kolumn (odporne na fuzję komórek)
             for i in range(1, ws.max_column + 1):
                 ws.column_dimensions[get_column_letter(i)].width = 25
                 
@@ -325,7 +342,6 @@ if uploaded_file is not None:
         
     df_sale = pd.read_excel(xls, "Sale")
     
-    # Rozwiązanie błędu "sale_dane is not defined" - przenosimy parsowanie tutaj
     sale_dane = []
     for _, r in df_sale.iterrows():
         s_poz = [p.strip() for p in str(r["Przeznaczenie"]).split(",")] if pd.notna(r["Przeznaczenie"]) else []
@@ -476,7 +492,6 @@ if uploaded_file is not None:
                 
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
-                # DWUETAPOWY START: Najpierw 10 min przerwy, potem 5 min
                 for gap_pref in [10, 5]:
                     if znaleziono: break
                     
@@ -584,7 +599,7 @@ if uploaded_file is not None:
                         
                         if not df_grid.empty:
                             uniq_leks = df_f["Lektor"].unique()
-                            cmap = {lek: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, lek in enumerate(uniq_leks)}
+                            cmap = {lek: colors_pool[i % len(colors_pool)] for i, lek in enumerate(uniq_leks)}
                             
                             try: styled = df_grid.style.map(lambda x: style_cell_with_cmap(x, cmap))
                             except: styled = df_grid.style.applymap(lambda x: style_cell_with_cmap(x, cmap))
@@ -604,7 +619,7 @@ if uploaded_file is not None:
                 
                 if not df_grid_lek.empty:
                     uniq_g = df_lek["Grupa"].unique()
-                    cmap_l = {g: f"background-color: {colors_pool[i % len(colors_pool)]}; color: #000000; font-weight: bold;" for i, g in enumerate(uniq_g)}
+                    cmap_l = {g: colors_pool[i % len(colors_pool)] for i, g in enumerate(uniq_g)}
                     
                     try: styled_lek = df_grid_lek.style.map(lambda x: style_cell_with_cmap(x, cmap_l))
                     except: styled_lek = df_grid_lek.style.applymap(lambda x: style_cell_with_cmap(x, cmap_l))
