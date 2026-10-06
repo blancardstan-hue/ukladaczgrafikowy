@@ -16,9 +16,21 @@ def generate_excel_template():
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         
-        # 1. Lektorzy (GENEROWANIE 70 LOSOWYCH)
-        imiona = ["Anna", "Jan", "Katarzyna", "Michał", "Agnieszka", "Piotr", "Magda", "Tomasz", "Ewa", "Krzysztof"]
-        nazwiska = ["Nowak", "Kowal", "Wika", "Zet", "Iks", "Igrek", "Alfa", "Beta", "Gamma", "Omega"]
+        # 1. Lektorzy (70 UNIKALNYCH)
+        imiona = [
+            "Anna", "Maria", "Katarzyna", "Małgorzata", "Agnieszka", "Ewa", "Magdalena", 
+            "Julia", "Zofia", "Hanna", "Jan", "Piotr", "Krzysztof", "Andrzej", "Tomasz", 
+            "Paweł", "Michał", "Marcin", "Jakub", "Adam"
+        ]
+        nazwiska = [
+            "Nowak", "Kowalski", "Wiśniewski", "Wójcik", "Kowalczyk", "Kamiński", "Lewandowski", 
+            "Zieliński", "Szymański", "Woźniak", "Dąbrowski", "Kozłowski", "Jankowski", "Mazur", 
+            "Kwiatkowski", "Krawczyk", "Kaczmarek", "Piotrowski", "Grabowski", "Zając"
+        ]
+        
+        kombinacje = [f"{i} {n}" for i in imiona for n in nazwiska]
+        wybrani = random.sample(kombinacje, 70)
+        
         godziny_lek = ["14:00-20:00", "13:00-19:00", "15:00-20:00", "08:00-12:00,15:00-19:00", "14:30-18:30", ""]
         filie = ["Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2", "Nowa Wieś"]
         poziomy_opcje = [
@@ -28,9 +40,9 @@ def generate_excel_template():
         ]
         
         lektorzy_data = []
-        for i in range(1, 71):
+        for i, nazwa in enumerate(wybrani, 1):
             lektorzy_data.append({
-                "Lektor": f"{random.choice(imiona)} {random.choice(nazwiska)} (L{i})",
+                "Lektor": f"{nazwa} (L{i})",
                 "Dostępność Pon": random.choice(godziny_lek),
                 "Dostępność Wt": random.choice(godziny_lek),
                 "Dostępność Śr": random.choice(godziny_lek),
