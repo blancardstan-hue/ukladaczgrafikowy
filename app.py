@@ -16,20 +16,33 @@ def generate_excel_template():
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         
-        # 1. Lektorzy
-        pd.DataFrame({
-            "Lektor": ["Jan", "Anna", "Marek", "Katarzyna", "Piotr"],
-            "Dostępność Pon": ["14:00-19:00", "08:00-12:00,15:00-20:00", "15:00-20:00", "13:00-17:00", ""],
-            "Dostępność Wt": ["14:00-19:00", "15:00-18:00", "08:00-13:00", "13:00-17:00", "14:00-19:00"],
-            "Dostępność Śr": ["08:00-11:00", "15:00-18:00", "15:00-20:00", "13:00-17:00", "14:00-19:00"],
-            "Dostępność Czw": ["14:00-19:00", "", "15:00-20:00", "08:00-12:00", "14:00-19:00"],
-            "Dostępność Pt": ["", "15:00-18:00", "", "13:00-17:00", "08:00-15:00"],
-            "Filie": ["Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2"],
-            "Poziomy": ["5, 6, 7, 8, Masters", "3-5 lat, 0, 1", "2, 4", "0, 1, 2, 3, 4, 5, 6", "Masters"]
-        }).to_excel(writer, sheet_name="Lektorzy", index=False)
+        # 1. Lektorzy (GENEROWANIE 70 LOSOWYCH)
+        imiona = ["Anna", "Jan", "Katarzyna", "Michał", "Agnieszka", "Piotr", "Magda", "Tomasz", "Ewa", "Krzysztof"]
+        nazwiska = ["Nowak", "Kowal", "Wika", "Zet", "Iks", "Igrek", "Alfa", "Beta", "Gamma", "Omega"]
+        godziny_lek = ["14:00-20:00", "13:00-19:00", "15:00-20:00", "08:00-12:00,15:00-19:00", "14:30-18:30", ""]
+        filie = ["Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2", "Nowa Wieś"]
+        poziomy_opcje = [
+            "3-5 lat, 0, 1, 2, 3", 
+            "4, 5, 6, 7, 8, Masters", 
+            "0, 1, 2, 3, 4, 5, 6, 7, 8, Masters"
+        ]
+        
+        lektorzy_data = []
+        for i in range(1, 71):
+            lektorzy_data.append({
+                "Lektor": f"{random.choice(imiona)} {random.choice(nazwiska)} (L{i})",
+                "Dostępność Pon": random.choice(godziny_lek),
+                "Dostępność Wt": random.choice(godziny_lek),
+                "Dostępność Śr": random.choice(godziny_lek),
+                "Dostępność Czw": random.choice(godziny_lek),
+                "Dostępność Pt": random.choice(godziny_lek),
+                "Filie": ", ".join(random.sample(filie, k=random.randint(1, 3))),
+                "Poziomy": random.choice(poziomy_opcje)
+            })
+            
+        pd.DataFrame(lektorzy_data).to_excel(writer, sheet_name="Lektorzy", index=False)
         
         # 2. Sale
-        filie = ["Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2", "Nowa Wieś"]
         sale_data = []
         for f in filie:
             for i in range(1, 6):
