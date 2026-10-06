@@ -76,47 +76,4 @@ def generate_excel_template():
         # Arkusz 3: Młodsze Dzieci
         df_mlodsze = pd.DataFrame({
             "Nazwa Grupy": ["Lwy", "Tygrysy", "Żyrafy", "Misie"],
-            "Poziom": ["0", "1", "3-5 lat", "2"],
-            "Liczba Dzieci": [8, 10, 6, 12],
-            "Czas trwania (min)": [60, 60, 60, 60],
-            "Skąd Odbiór": ["SP nr 1", "Przedszkole nr 5", "Przedszkole nr 2", "SP nr 2"],
-            "Docelowa Filia": ["Komorów", "Michałowice", "Pruszków", "Ursus 1"],
-            "Koniec Szkoły Pon": ["13:30", "14:00", "12:30", "13:30"],
-            "Koniec Szkoły Wt": ["14:25", "14:00", "12:30", "14:25"],
-            "Koniec Szkoły Śr": ["13:30", "14:00", "12:30", "13:30"],
-            "Koniec Szkoły Czw": ["14:25", "14:00", "12:30", "14:25"],
-            "Koniec Szkoły Pt": ["12:30", "14:00", "12:30", "12:30"],
-            "Liczba Spotkań": [2, 2, 2, 1]
-        })
-        df_mlodsze.to_excel(writer, sheet_name="Młodsze Dzieci", index=False)
-        
-        # Arkusz 4: Starsi Uczniowie - GENEROWANIE LOSOWEJ BAZY TESTOWEJ
-        starsi_data = []
-        godziny = ["12:00", "12:30", "13:20", "13:40", "14:25", "15:00", "15:15", "15:20", "16:05"]
-        
-        # Przykłady wymuszone dla pewności (z Twoich promptów)
-        wymuszone = [
-            ("SP nr 1", "4", "B", 3, "13:20"), ("SP nr 1", "4", "C", 1, "13:40"), 
-            ("SP nr 1", "4", "A", 2, "12:20"), ("SP nr 1", "4", "D", 4, "13:30"),
-            ("SP nr 1", "5", "A", 0, "15:00"), ("SP nr 1", "5", "B", 1, "15:30"),
-            ("SP nr 1", "5", "C", 0, "15:15"), ("SP nr 1", "5", "D", 1, "15:00"),
-            ("SP nr 1", "8", "A", 5, "12:00"), ("SP nr 1", "8", "B", 9, "15:00"),
-            ("SP nr 1", "8", "C", 4, "12:30"), ("SP nr 1", "8", "D", 2, "15:20")
-        ]
-        for sz, poz, lit, chetni, czas in wymuszone:
-            starsi_data.append({
-                "Szkoła i Klasa": f"{sz} - Klasa {poz}{lit}",
-                "Poziom": poz, "Liczba Chętnych": chetni, "Czas trwania (min)": 90,
-                "Docelowa Filia": "Komorów",
-                "Koniec Lekcji Pon": czas, "Koniec Lekcji Wt": czas, "Koniec Lekcji Śr": czas,
-                "Koniec Lekcji Czw": czas, "Koniec Lekcji Pt": czas
-            })
-
-        # Reszta generatora
-        for klasa_num in range(1, 9):
-            if klasa_num in [4, 5, 8]: continue # Ominięcie wymuszonych
-            liczba_oddzialow = random.randint(4, 6)
-            for litera in ['A', 'B', 'C', 'D', 'E', 'F'][:liczba_oddzialow]:
-                starsi_data.append({
-                    "Szkoła i Klasa": f"SP nr 1 - Klasa {klasa_num}{litera}",
-                    "Poziom": str(klasa_num), "Liczba Chętnych": random.randint(0, 10), "
+            "Po
