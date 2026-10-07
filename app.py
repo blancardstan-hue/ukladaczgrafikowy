@@ -219,7 +219,6 @@ def check_lektor(lek, d, st_m, en_m, grafik, gap):
 def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap, lektor):
     dostepne = [s["Sala"] for s in sale_dane if s["Filia"] == filia and (poziom in s["Poziomy"] or "Wszystkie" in s["Poziomy"])]
     
-    # Priorytetyzacja sal: 1. Sala w której lektor ma już dziś zajęcia, 2. Sala w której kiedykolwiek uczy
     sale_dzis = [g["Sala"] for g in grafik if g["Lektor"] == lektor and g["Dzień"] == d and g["Filia"] == filia]
     sale_ogolnie = [g["Sala"] for g in grafik if g["Lektor"] == lektor and g["Filia"] == filia]
     
@@ -257,7 +256,6 @@ def style_cell_with_cmap_lektor(val, cmap):
     val_str = str(val)
     check_val = val_str.replace("~", "")
     for k, color in cmap.items():
-        # Dedykowane dla lektora - k to nazwa grupy bez nawiasów
         if k in check_val:
             if val_str.startswith("~"):
                 return f"background-color: {color}; color: {color};"
@@ -269,8 +267,7 @@ def format_cell_text(val):
     val_str = str(val)
     chunks = val_str.split(" | \n")
     visible_chunks = [c.replace("~", "") for c in chunks if not c.strip().startswith("~")]
-    if not visible_chunks:
-        return ""
+    if not visible_chunks: return ""
     return " | \n".join(visible_chunks)
 
 def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
@@ -299,8 +296,7 @@ def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
             intervals_touched = []
             for i, (win_st, win_en) in enumerate(time_intervals):
                 overlap = min(en_m, win_en) - max(st_m, win_st)
-                if overlap > 0:
-                    intervals_touched.append((i, overlap))
+                if overlap > 0: intervals_touched.append((i, overlap))
             
             if not intervals_touched: continue
             
@@ -337,8 +333,7 @@ def generate_grid_for_lektor(df_lek):
             intervals_touched = []
             for i, (win_st, win_en) in enumerate(time_intervals):
                 overlap = min(en_m, win_en) - max(st_m, win_st)
-                if overlap > 0:
-                    intervals_touched.append((i, overlap))
+                if overlap > 0: intervals_touched.append((i, overlap))
             
             if not intervals_touched: continue
             
@@ -377,7 +372,6 @@ def create_excel_download(grafiki_dict):
                         visible_chunks = [c.replace("~", "") for c in chunks if not c.strip().startswith("~")]
                         if visible_chunks: cell.value = " | \n".join(visible_chunks)
                         else: cell.value = ""
-
                     cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
 
             for row in ws.iter_rows(min_col=1, max_col=1):
@@ -581,19 +575,14 @@ if uploaded_file is not None:
                 zadania.append({"Grupa": r["Nazwa Grupy"], "Poziom": str(r["Poziom"]), "Filia": str(r["Docelowa Filia"]), "Czas": r["Czas trwania (min)"], "Spotkań": int(r.get("Liczba Spotkań", 2)), "Typ": "Starsza", "Odbiór": "", "Windows": zbuduj_okna(r, "Starsza")})
                 
             zadania.sort(key=lambda x: (len(x["Windows"]), -x["Czas"]))
-            przypisane_grupy_lektora = {l["Lektor"]: set() for l in lektorzy_dane}
+            
+            tracker = {l["Lektor"]: {"grupy": set(), "poziomy": [], "filie_dni": {}} for l in lektorzy_dane}
             
             for zad in zadania:
                 combos = get_scored_combos(zad["Windows"], zad["Spotkań"])
                 znaleziono = False
                 
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
-                
-                valid_leks.sort(key=lambda l: (
-                    len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit_Max"],
-                    len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit_Min"],
-                    len(przypisane_grupy_lektora[l["Lektor"]])
-                ))
                 
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
@@ -602,7 +591,32 @@ if uploaded_file is not None:
                     
                     for combo in combos:
                         if znaleziono: break
-                        for lek in valid_leks:
+                        
+                        def lek_score(lek):
+                            trk = tracker[lek["Lektor"]]
+                            score = 0
+                            
+                            hit_max = len(trk["grupy"]) >= lek["Limit_Max"]
+                            hit_min = len(trk["grupy"]) >= lek["Limit_Min"]
+                            
+                            if hit_max: score += 10000
+                            if hit_min: score += 100
+                            
+                            for d in combo:
+                                dni_filie = trk["filie_dni"].get(d, set())
+                                if dni_filie:
+                                    if zad["Filia"] not in dni_filie: score += 2000  
+                                    else: score -= 30    
+                                        
+                            level_count = trk["poziomy"].count(zad["Poziom"])
+                            score -= (level_count * 15) 
+                            
+                            score += len(trk["grupy"]) 
+                            return score
+
+                        combo_valid_leks = sorted(valid_leks, key=lek_score)
+                        
+                        for lek in combo_valid_leks:
                             if znaleziono: break
                             
                             zaplanowane_dni = []
@@ -662,7 +676,11 @@ if uploaded_file is not None:
                                 
                             if len(zaplanowane_dni) == len(combo):
                                 grafik.extend(zaplanowane_dni)
-                                przypisane_grupy_lektora[lek["Lektor"]].add(zad["Grupa"])
+                                tracker[lek["Lektor"]]["grupy"].add(zad["Grupa"])
+                                tracker[lek["Lektor"]]["poziomy"].append(zad["Poziom"])
+                                for d in combo:
+                                    if d not in tracker[lek["Lektor"]]["filie_dni"]: tracker[lek["Lektor"]]["filie_dni"][d] = set()
+                                    tracker[lek["Lektor"]]["filie_dni"][d].add(zad["Filia"])
                                 znaleziono = True
                                 break 
                 
