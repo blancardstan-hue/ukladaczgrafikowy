@@ -45,22 +45,17 @@ def generate_excel_template():
         
         lektorzy_data = []
         for nazwa in wybrani:
-            # Losowanie bazy: większość (80%) w przedziale 3-6 grup. Rzadziej 2 lub 7, 8.
-            min_gr = random.choices(
-                [2, 3, 4, 5, 6, 7, 8], 
-                weights=[10, 20, 25, 20, 15, 5, 5]
-            )[0]
-            
-            # Tolerancja: 30% sztywna liczba (0), 55% tolerancja o 1, 15% tolerancja o 2
-            variance = random.choices([0, 1, 2], weights=[30, 55, 15])[0]
+            min_gr = random.randint(3, 6)
+            variance = random.choices([1, 2], weights=[80, 20])[0]
             max_gr = min_gr + variance
+            if max_gr > 8: max_gr = 8
             
-            # Twardy sufit - nikt nie dostaje więcej niż 8 grup
-            if max_gr > 8:
-                max_gr = 8
-                
+            # Preferencyjne traktowanie - ok. 5% lektorów ma TAK
+            pref = random.choices(["TAK", "NIE"], weights=[5, 95])[0]
+            
             lektorzy_data.append({
                 "Lektor": nazwa,
+                "Preferencyjne traktowanie": pref,
                 "Min liczba grup": min_gr,
                 "Max liczba grup": max_gr,
                 "Dostępność Pon": random.choice(godziny_lek),
@@ -438,13 +433,16 @@ if uploaded_file is not None:
     xls = pd.ExcelFile(uploaded_file)
     df_lektorzy = pd.read_excel(xls, "Lektorzy")
     
+    # Obsługa kompatybilności wstecznej + nowa kolumna
+    if "Preferencyjne traktowanie" not in df_lektorzy.columns:
+        df_lektorzy.insert(1, "Preferencyjne traktowanie", "NIE")
     if "Min liczba grup" not in df_lektorzy.columns:
-        df_lektorzy.insert(1, "Min liczba grup", 0)
+        df_lektorzy.insert(2, "Min liczba grup", 0)
     if "Max liczba grup" not in df_lektorzy.columns:
         if "Zadeklarowana liczba grup" in df_lektorzy.columns:
-            df_lektorzy.insert(2, "Max liczba grup", df_lektorzy["Zadeklarowana liczba grup"])
+            df_lektorzy.insert(3, "Max liczba grup", df_lektorzy["Zadeklarowana liczba grup"])
         else:
-            df_lektorzy.insert(2, "Max liczba grup", 100)
+            df_lektorzy.insert(3, "Max liczba grup", 100)
         
     df_sale = pd.read_excel(xls, "Sale")
     
@@ -540,7 +538,7 @@ if uploaded_file is not None:
         st.session_state.wygenerowano = False
         
     if st.button("🚀 Wygeneruj Grafik", type="primary"):
-        with st.spinner("Przeszukuję okna, zasoby i przerwy..."):
+        with st.spinner("Przeszukuję okna, zasoby i preferencje..."):
             grafik, grafik_op, nieprzypisane = [], [], []
             
             czas_tras = {f"{r['Początek']}_{r['Koniec']}": r["Czas (min)"] for _, r in df_trasy.iterrows()}
@@ -553,12 +551,16 @@ if uploaded_file is not None:
                 l_filie = [f.strip() for f in str(r["Filie"]).split(",")] if pd.notna(r["Filie"]) else []
                 avail = {dni_short[i]: parse_availability(r.get(f"Dostępność {dni_short[i]}", "")) for i in range(5)}
                 
+                pref_val = str(r.get("Preferencyjne traktowanie", "NIE")).strip().upper()
+                is_pref = (pref_val == "TAK")
+                
                 lim_min = int(r.get("Min liczba grup", 0))
                 lim_max = int(r.get("Max liczba grup", 100))
                 
                 lektorzy_dane.append({
                     "Lektor": r["Lektor"], "Poziomy": l_poziomy, "Filie": l_filie, 
-                    "Avail": avail, "Limit_Min": lim_min, "Limit_Max": lim_max
+                    "Avail": avail, "Limit_Min": lim_min, "Limit_Max": lim_max,
+                    "Pref": is_pref
                 })
                 
             opiekunki_dane = []
@@ -626,6 +628,10 @@ if uploaded_file is not None:
                             if hit_max: score += 10000
                             if hit_min: score += 100
                             
+                            # Ogromny boost dla lektorów preferencyjnych, którzy nie dobili do minimum
+                            if lek["Pref"] and not hit_min:
+                                score -= 800
+                            
                             for d in combo:
                                 dni_filie = trk["filie_dni"].get(d, set())
                                 if dni_filie:
@@ -633,7 +639,14 @@ if uploaded_file is not None:
                                     else: score -= 30    
                                         
                             level_count = trk["poziomy"].count(zad["Poziom"])
-                            score -= (level_count * 15) 
+                            
+                            # Nagradzanie trzymania się tych samych poziomów (silniej dla preferencyjnych)
+                            if lek["Pref"]:
+                                score -= (level_count * 50)
+                                if len(trk["poziomy"]) > 0 and level_count == 0:
+                                    score += 200 # Kara za nowy poziom
+                            else:
+                                score -= (level_count * 15) 
                             
                             score += len(trk["grupy"]) 
                             return score
@@ -714,8 +727,25 @@ if uploaded_file is not None:
                 if not znaleziono:
                     nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak wspólnego zasobu (Lektor/Sala) z wymaganą przerwą"})
 
+            # === WYSZUKIWANIE OSTRZEŻEŃ ===
+            warnings_min_grup = []
+            warnings_rozstrzal = []
+            
+            for lek in lektorzy_dane:
+                przypisane = len(tracker[lek["Lektor"]]["grupy"])
+                
+                if przypisane > 0 or lek["Limit_Min"] > 0:
+                    if przypisane < lek["Limit_Min"]:
+                        warnings_min_grup.append(f"Lektor **{lek['Lektor']}** chciał uczyć {lek['Limit_Min']}-{lek['Limit_Max']} grup, a przypisano mu tylko **{przypisane}**.")
+                
+                unikalne_poziomy = set(tracker[lek["Lektor"]]["poziomy"])
+                if len(unikalne_poziomy) >= 4:
+                    warnings_rozstrzal.append(f"Lektor **{lek['Lektor']}** ma {przypisane} grup, ale aż **{len(unikalne_poziomy)} różne poziomy** ({', '.join(sorted(unikalne_poziomy))}).")
+            
             st.session_state.grafik = grafik
             st.session_state.nieprzypisane = nieprzypisane
+            st.session_state.warnings_min = warnings_min_grup
+            st.session_state.warnings_lvl = warnings_rozstrzal
             st.session_state.wygenerowano = True
 
     # ==========================================
@@ -730,6 +760,17 @@ if uploaded_file is not None:
             st.dataframe(pd.DataFrame(nieprzypisane), use_container_width=True)
         else:
             st.success("🎉 Sukces! Przypisano wszystkie grupy zachowując zakresy (MIN/MAX) lektorów i przerwy!")
+            
+        if st.session_state.get("warnings_min") or st.session_state.get("warnings_lvl"):
+            with st.expander("⚠️ Raport ostrzeżeń: Niespełnione preferencje lektorów", expanded=True):
+                if st.session_state.warnings_min:
+                    st.markdown("#### 📉 Brak wymaganej liczby grup")
+                    for w in st.session_state.warnings_min:
+                        st.write(f"- {w}")
+                if st.session_state.warnings_lvl:
+                    st.markdown("#### 🔀 Duży rozstrzał poziomów")
+                    for w in st.session_state.warnings_lvl:
+                        st.write(f"- {w}")
             
         st.subheader("Wizualizacja Grafiku")
         
