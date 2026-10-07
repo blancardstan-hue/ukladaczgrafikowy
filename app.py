@@ -45,8 +45,20 @@ def generate_excel_template():
         
         lektorzy_data = []
         for nazwa in wybrani:
-            min_gr = random.randint(2, 4)
-            max_gr = min_gr + random.randint(1, 3)
+            # Losowanie bazy: większość (80%) w przedziale 3-6 grup. Rzadziej 2 lub 7, 8.
+            min_gr = random.choices(
+                [2, 3, 4, 5, 6, 7, 8], 
+                weights=[10, 20, 25, 20, 15, 5, 5]
+            )[0]
+            
+            # Tolerancja: 30% sztywna liczba (0), 55% tolerancja o 1, 15% tolerancja o 2
+            variance = random.choices([0, 1, 2], weights=[30, 55, 15])[0]
+            max_gr = min_gr + variance
+            
+            # Twardy sufit - nikt nie dostaje więcej niż 8 grup
+            if max_gr > 8:
+                max_gr = 8
+                
             lektorzy_data.append({
                 "Lektor": nazwa,
                 "Min liczba grup": min_gr,
@@ -198,14 +210,6 @@ def score_combo(combo):
         return 10
     return 1
 
-def get_scored_combos(avail_dict, spotkan):
-    valid_days = list(avail_dict.keys())
-    if len(valid_days) < spotkan: return []
-    combos = list(itertools.combinations(valid_days, spotkan))
-    scored = [(c, score_combo(c)) for c in combos]
-    scored.sort(key=lambda x: x[1]) 
-    return [x[0] for x in scored]
-
 def check_lektor(lek, d, st_m, en_m, grafik, gap):
     can_work = any(b_s <= st_m and b_e >= en_m for (b_s, b_e) in lek["Avail"][d])
     if not can_work: return False
@@ -218,7 +222,6 @@ def check_lektor(lek, d, st_m, en_m, grafik, gap):
 
 def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap, lektor):
     dostepne = [s["Sala"] for s in sale_dane if s["Filia"] == filia and (poziom in s["Poziomy"] or "Wszystkie" in s["Poziomy"])]
-    
     sale_dzis = [g["Sala"] for g in grafik if g["Lektor"] == lektor and g["Dzień"] == d and g["Filia"] == filia]
     sale_ogolnie = [g["Sala"] for g in grafik if g["Lektor"] == lektor and g["Filia"] == filia]
     
@@ -228,7 +231,6 @@ def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap, lektor):
         return 2
         
     dostepne.sort(key=sala_score)
-    
     for s in dostepne:
         zajeta = any(g["Sala"] == s and g["Dzień"] == d and g["Filia"] == filia and is_overlap(st_m, en_m, g["Start"], g["End"], gap) for g in grafik)
         if not zajeta: return s
@@ -243,24 +245,42 @@ colors_pool = [
 def style_cell_with_cmap(val, cmap):
     if val == "-" or pd.isna(val) or val == "": return ""
     val_str = str(val)
-    check_val = val_str.replace("~", "")
+    chunks = val_str.split(" | \n")
+    visible_chunks = [c for c in chunks if not c.strip().startswith("~")]
+    
+    check_val = chunks[0].replace("~", "")
+    bg_color = ""
     for k, color in cmap.items():
         if f"({k})" in check_val or check_val.startswith(k):
-            if val_str.startswith("~"):
-                return f"background-color: {color}; color: {color};"
-            return f"background-color: {color}; color: #000000; font-weight: bold;"
-    return ""
+            bg_color = color
+            break
+            
+    if not bg_color: return ""
+
+    if not visible_chunks:
+        return f"background-color: {bg_color}; color: {bg_color};"
+    else:
+        return f"background-color: {bg_color}; color: #000000; font-weight: bold;"
 
 def style_cell_with_cmap_lektor(val, cmap):
     if val == "-" or pd.isna(val) or val == "": return ""
     val_str = str(val)
-    check_val = val_str.replace("~", "")
+    chunks = val_str.split(" | \n")
+    visible_chunks = [c for c in chunks if not c.strip().startswith("~")]
+    
+    check_val = chunks[0].replace("~", "")
+    bg_color = ""
     for k, color in cmap.items():
         if k in check_val:
-            if val_str.startswith("~"):
-                return f"background-color: {color}; color: {color};"
-            return f"background-color: {color}; color: #000000; font-weight: bold;"
-    return ""
+            bg_color = color
+            break
+            
+    if not bg_color: return ""
+
+    if not visible_chunks:
+        return f"background-color: {bg_color}; color: {bg_color};"
+    else:
+        return f"background-color: {bg_color}; color: #000000; font-weight: bold;"
 
 def format_cell_text(val):
     if val == "-" or pd.isna(val) or val == "": return val
@@ -270,6 +290,42 @@ def format_cell_text(val):
     if not visible_chunks: return ""
     return " | \n".join(visible_chunks)
 
+def apply_lesson_to_grid(df_grid, st_m, en_m, col_key, wpis):
+    start_day = 480  
+    end_day = 1260   
+    time_intervals = [(m, m+30) for m in range(start_day, end_day, 30)]
+    idx_labels = [mins_to_time(m) for m in range(start_day, end_day, 30)]
+
+    intervals_touched = []
+    for i, (win_st, win_en) in enumerate(time_intervals):
+        overlap = min(en_m, win_en) - max(st_m, win_st)
+        if overlap > 0:
+            intervals_touched.append((i, overlap))
+    
+    if not intervals_touched: return
+    
+    num_blocks = max(1, round((en_m - st_m) / 30.0))
+    best_window = []
+    max_ov = -1
+    
+    for j in range(len(intervals_touched) - num_blocks + 1):
+        window = intervals_touched[j : j + num_blocks]
+        ov = sum(x[1] for x in window)
+        if ov > max_ov:
+            max_ov = ov
+            best_window = window
+            
+    if not best_window:
+        best_window = intervals_touched
+        
+    main_i = best_window[0][0]
+    
+    for i, overlap in best_window:
+        current_wpis = wpis if i == main_i else "~" + wpis
+        current_val = df_grid.at[idx_labels[i], col_key]
+        if current_val: df_grid.at[idx_labels[i], col_key] = str(current_val) + " | \n" + current_wpis
+        else: df_grid.at[idx_labels[i], col_key] = current_wpis
+
 def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
     sale_w_filii = sorted([s["Sala"] for s in sale_dane if s["Filia"] == filia_nazwa])
     if not sale_w_filii: sale_w_filii = ["1", "2", "3", "4", "5"]
@@ -278,7 +334,6 @@ def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
     
     start_day = 480  
     end_day = 1260   
-    time_intervals = [(m, m+30) for m in range(start_day, end_day, 30)]
     idx_labels = [mins_to_time(m) for m in range(start_day, end_day, 30)]
     
     df_grid = pd.DataFrame(index=idx_labels, columns=multi_cols).fillna("")
@@ -287,37 +342,15 @@ def generate_grid_for_filia(df_f, filia_nazwa, sale_dane):
     for _, row in df_f.iterrows():
         d = row["Dzień"]
         s = row["Sala"]
-        st_m = row["Start"]
-        en_m = row["End"]
-        
-        wpis = f"{mins_to_time(st_m)}-{mins_to_time(en_m)}\n{row['Grupa']} ({row['Lektor']}){row.get('Op_Str', '')}"
-        
         if d in dni_short and s in sale_w_filii:
-            intervals_touched = []
-            for i, (win_st, win_en) in enumerate(time_intervals):
-                overlap = min(en_m, win_en) - max(st_m, win_st)
-                if overlap > 0: intervals_touched.append((i, overlap))
-            
-            if not intervals_touched: continue
-            
-            main_i = intervals_touched[0][0]
-            for i, overlap in intervals_touched:
-                if overlap >= 15:
-                    main_i = i
-                    break
-                    
-            for i, overlap in intervals_touched:
-                current_wpis = wpis if i == main_i else "~" + wpis
-                current_val = df_grid.at[idx_labels[i], (d, s)]
-                if current_val: df_grid.at[idx_labels[i], (d, s)] = current_val + " | \n" + current_wpis
-                else: df_grid.at[idx_labels[i], (d, s)] = current_wpis
+            wpis = f"{mins_to_time(row['Start'])}-{mins_to_time(row['End'])}\n{row['Grupa']} ({row['Lektor']}){row.get('Op_Str', '')}"
+            apply_lesson_to_grid(df_grid, row["Start"], row["End"], (d, s), wpis)
                         
     return df_grid
 
 def generate_grid_for_lektor(df_lek):
     start_day = 480
     end_day = 1260
-    time_intervals = [(m, m+30) for m in range(start_day, end_day, 30)]
     idx_labels = [mins_to_time(m) for m in range(start_day, end_day, 30)]
     
     df_grid = pd.DataFrame(index=idx_labels, columns=dni_short).fillna("")
@@ -325,29 +358,9 @@ def generate_grid_for_lektor(df_lek):
     
     for _, row in df_lek.iterrows():
         d = row["Dzień"]
-        st_m = row["Start"]
-        en_m = row["End"]
-        wpis = f"{mins_to_time(st_m)}-{mins_to_time(en_m)}\n{row['Grupa']}\n📍 {row['Filia']} (Sala: {row['Sala']})"
-        
         if d in dni_short:
-            intervals_touched = []
-            for i, (win_st, win_en) in enumerate(time_intervals):
-                overlap = min(en_m, win_en) - max(st_m, win_st)
-                if overlap > 0: intervals_touched.append((i, overlap))
-            
-            if not intervals_touched: continue
-            
-            main_i = intervals_touched[0][0]
-            for i, overlap in intervals_touched:
-                if overlap >= 15:
-                    main_i = i
-                    break
-                    
-            for i, overlap in intervals_touched:
-                current_wpis = wpis if i == main_i else "~" + wpis
-                current_val = df_grid.at[idx_labels[i], d]
-                if current_val: df_grid.at[idx_labels[i], d] = current_val + " | \n" + current_wpis
-                else: df_grid.at[idx_labels[i], d] = current_wpis
+            wpis = f"{mins_to_time(row['Start'])}-{mins_to_time(row['End'])}\n{row['Grupa']}\n📍 {row['Filia']} (Sala: {row['Sala']})"
+            apply_lesson_to_grid(df_grid, row["Start"], row["End"], d, wpis)
                     
     return df_grid
 
@@ -372,6 +385,7 @@ def create_excel_download(grafiki_dict):
                         visible_chunks = [c.replace("~", "") for c in chunks if not c.strip().startswith("~")]
                         if visible_chunks: cell.value = " | \n".join(visible_chunks)
                         else: cell.value = ""
+
                     cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
 
             for row in ws.iter_rows(min_col=1, max_col=1):
@@ -577,13 +591,23 @@ if uploaded_file is not None:
             zadania.sort(key=lambda x: (len(x["Windows"]), -x["Czas"]))
             
             tracker = {l["Lektor"]: {"grupy": set(), "poziomy": [], "filie_dni": {}} for l in lektorzy_dane}
+            filia_day_load = {}
+            
+            def get_load(filia, days):
+                f_load = filia_day_load.get(filia, {})
+                return sum(f_load.get(d, 0) for d in days)
             
             for zad in zadania:
-                combos = get_scored_combos(zad["Windows"], zad["Spotkań"])
+                valid_days = list(zad["Windows"].keys())
+                if len(valid_days) >= zad["Spotkań"]:
+                    combos = list(itertools.combinations(valid_days, zad["Spotkań"]))
+                    random.shuffle(combos) 
+                    combos.sort(key=lambda c: (score_combo(c), get_load(zad["Filia"], c)))
+                else:
+                    combos = []
+
                 znaleziono = False
-                
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
-                
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
                 for gap_pref in [10, 5]:
@@ -678,7 +702,10 @@ if uploaded_file is not None:
                                 grafik.extend(zaplanowane_dni)
                                 tracker[lek["Lektor"]]["grupy"].add(zad["Grupa"])
                                 tracker[lek["Lektor"]]["poziomy"].append(zad["Poziom"])
+                                
+                                if zad["Filia"] not in filia_day_load: filia_day_load[zad["Filia"]] = {}
                                 for d in combo:
+                                    filia_day_load[zad["Filia"]][d] = filia_day_load[zad["Filia"]].get(d, 0) + 1
                                     if d not in tracker[lek["Lektor"]]["filie_dni"]: tracker[lek["Lektor"]]["filie_dni"][d] = set()
                                     tracker[lek["Lektor"]]["filie_dni"][d].add(zad["Filia"])
                                 znaleziono = True
