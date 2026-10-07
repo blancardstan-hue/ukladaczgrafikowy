@@ -216,8 +216,20 @@ def check_lektor(lek, d, st_m, en_m, grafik, gap):
     )
     return not zajety
 
-def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap):
+def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap, lektor):
     dostepne = [s["Sala"] for s in sale_dane if s["Filia"] == filia and (poziom in s["Poziomy"] or "Wszystkie" in s["Poziomy"])]
+    
+    # Priorytetyzacja sal: 1. Sala w której lektor ma już dziś zajęcia, 2. Sala w której kiedykolwiek uczy
+    sale_dzis = [g["Sala"] for g in grafik if g["Lektor"] == lektor and g["Dzień"] == d and g["Filia"] == filia]
+    sale_ogolnie = [g["Sala"] for g in grafik if g["Lektor"] == lektor and g["Filia"] == filia]
+    
+    def sala_score(s):
+        if s in sale_dzis: return 0
+        if s in sale_ogolnie: return 1
+        return 2
+        
+    dostepne.sort(key=sala_score)
+    
     for s in dostepne:
         zajeta = any(g["Sala"] == s and g["Dzień"] == d and g["Filia"] == filia and is_overlap(st_m, en_m, g["Start"], g["End"], gap) for g in grafik)
         if not zajeta: return s
@@ -235,6 +247,18 @@ def style_cell_with_cmap(val, cmap):
     check_val = val_str.replace("~", "")
     for k, color in cmap.items():
         if f"({k})" in check_val or check_val.startswith(k):
+            if val_str.startswith("~"):
+                return f"background-color: {color}; color: {color};"
+            return f"background-color: {color}; color: #000000; font-weight: bold;"
+    return ""
+
+def style_cell_with_cmap_lektor(val, cmap):
+    if val == "-" or pd.isna(val) or val == "": return ""
+    val_str = str(val)
+    check_val = val_str.replace("~", "")
+    for k, color in cmap.items():
+        # Dedykowane dla lektora - k to nazwa grupy bez nawiasów
+        if k in check_val:
             if val_str.startswith("~"):
                 return f"background-color: {color}; color: {color};"
             return f"background-color: {color}; color: #000000; font-weight: bold;"
@@ -354,10 +378,8 @@ def create_excel_download(grafiki_dict):
                         if visible_chunks: cell.value = " | \n".join(visible_chunks)
                         else: cell.value = ""
 
-                    # Ustawienie domyślnej cienkiej ramki
                     cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
 
-            # Pogrubienie ramki w kolumnie godzinowej
             for row in ws.iter_rows(min_col=1, max_col=1):
                 for cell in row:
                     b = cell.border
@@ -365,7 +387,6 @@ def create_excel_download(grafiki_dict):
                     new_bottom = medium if cell.row == ws.max_row else b.bottom
                     cell.border = Border(top=new_top, bottom=new_bottom, left=medium, right=medium)
 
-            # Wyznaczanie i pogrubianie granic między dniami tygodnia
             if isinstance(df.columns, pd.MultiIndex):
                 for i in range(len(df.columns)):
                     current_day = df.columns[i][0]
@@ -567,6 +588,7 @@ if uploaded_file is not None:
                 znaleziono = False
                 
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
+                
                 valid_leks.sort(key=lambda l: (
                     len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit_Max"],
                     len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit_Min"],
@@ -600,7 +622,7 @@ if uploaded_file is not None:
                                     en_m = st_m + zad["Czas"]
                                     
                                     if check_lektor(lek, d, st_m, en_m, grafik, gap_pref):
-                                        sala = check_sala(zad["Filia"], zad["Poziom"], d, st_m, en_m, grafik, sale_dane, gap_pref)
+                                        sala = check_sala(zad["Filia"], zad["Poziom"], d, st_m, en_m, grafik, sale_dane, gap_pref, lek["Lektor"])
                                         
                                         if sala:
                                             op_przyp, op_odp = "", ""
@@ -691,6 +713,8 @@ if uploaded_file is not None:
                             st.dataframe(styled, use_container_width=False, height=600)
                         else: st.info(f"Brak zajęć dla {f_nazwa}.")
                     else: st.info("Grafik pusty.")
+            
+            dl_filename = "Gotowe_Grafiki_Filie.xlsx"
                     
         else:
             if not df_grafik.empty:
@@ -704,20 +728,23 @@ if uploaded_file is not None:
                     uniq_g = df_lek["Grupa"].unique()
                     cmap_l = {g: colors_pool[i % len(colors_pool)] for i, g in enumerate(uniq_g)}
                     
-                    try: styled_lek = df_grid_lek.style.map(lambda x, c=cmap_l: style_cell_with_cmap(x, c)).format(format_cell_text)
-                    except: styled_lek = df_grid_lek.style.applymap(lambda x, c=cmap_l: style_cell_with_cmap(x, c)).format(format_cell_text)
+                    try: styled_lek = df_grid_lek.style.map(lambda x, c=cmap_l: style_cell_with_cmap_lektor(x, c)).format(format_cell_text)
+                    except: styled_lek = df_grid_lek.style.applymap(lambda x, c=cmap_l: style_cell_with_cmap_lektor(x, c)).format(format_cell_text)
                     
                     grafiki_do_eksportu[wybrany_lek] = styled_lek
                     st.dataframe(styled_lek, use_container_width=True, height=600)
                 else: st.info("Grafik pusty.")
             else: st.info("Grafik pusty.")
+            
+            safe_lek_name = wybrany_lek.replace(" ", "_").replace("(", "").replace(")", "") if not df_grafik.empty else "Lektor"
+            dl_filename = f"Grafik_{safe_lek_name}.xlsx"
 
         if grafiki_do_eksportu:
             st.markdown("---")
             excel_data = create_excel_download(grafiki_do_eksportu)
             st.download_button(
-                label="📥 Pobierz wygenerowany grafik (Excel)", 
+                label=f"📥 Pobierz wygenerowany grafik ({dl_filename})", 
                 data=excel_data, 
-                file_name="Gotowe_Grafiki.xlsx",
+                file_name=dl_filename,
                 type="primary"
             )
