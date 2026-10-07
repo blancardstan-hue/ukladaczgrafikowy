@@ -30,11 +30,13 @@ def generate_excel_template():
         ]
         
         kombinacje = [f"{i} {n}" for i in imiona for n in nazwiska]
-        wybrani = random.sample(kombinacje, 72) # Równo 72 lektorów wg ręcznych obliczeń
+        wybrani = random.sample(kombinacje, 72)
         
-        godziny_lek = [
-            "14:00-20:00", "13:00-19:00", "15:00-20:00", 
-            "08:00-12:00,15:00-19:00", "14:30-18:30", "15:00-21:00"
+        # Dominacja pełnych etatów i szerokich popołudni
+        godziny_lek_opcje = [
+            "08:00-21:00", "08:00-21:00", "08:00-21:00", "08:00-21:00", 
+            "12:00-20:00", "13:00-21:00", "14:00-21:00",
+            "15:00-20:00", "16:00-21:00", "08:00-15:00"
         ]
         
         regiony_filii = [
@@ -52,7 +54,8 @@ def generate_excel_template():
         
         lektorzy_data = []
         for nazwa in wybrani:
-            min_gr = random.choices([1, 2, 3, 4, 5, 6, 7], weights=[5, 10, 20, 25, 25, 10, 5])[0]
+            # Przesunięcie wagi na osoby z 1-3 grupami (metodycy, liderzy itp.)
+            min_gr = random.choices([1, 2, 3, 4, 5, 6, 7], weights=[15, 20, 20, 15, 15, 10, 5])[0]
             variance = random.choices([0, 1, 2], weights=[20, 60, 20])[0]
             max_gr = min_gr + variance
             if max_gr > 8: max_gr = 8
@@ -69,11 +72,11 @@ def generate_excel_template():
                 "Preferencyjne traktowanie": pref,
                 "Min liczba grup": min_gr,
                 "Max liczba grup": max_gr,
-                "Dostępność Pon": random.choice(godziny_lek),
-                "Dostępność Wt": random.choice(godziny_lek),
-                "Dostępność Śr": random.choice(godziny_lek),
-                "Dostępność Czw": random.choice(godziny_lek),
-                "Dostępność Pt": random.choice(godziny_lek),
+                "Dostępność Pon": random.choice(godziny_lek_opcje),
+                "Dostępność Wt": random.choice(godziny_lek_opcje),
+                "Dostępność Śr": random.choice(godziny_lek_opcje),
+                "Dostępność Czw": random.choice(godziny_lek_opcje),
+                "Dostępność Pt": random.choice(godziny_lek_opcje),
                 "Filie": filie_str,
                 "Poziomy": random.choice(poziomy_opcje)
             })
@@ -221,8 +224,8 @@ def score_combo(combo):
         return 10
     return 1
 
-def check_lektor(lek, d, st_m, en_m, grafik, gap, zad_filia, zakaz_migracji):
-    if zakaz_migracji:
+def check_lektor(lek, d, st_m, en_m, grafik, gap, zad_filia, zakaz_migracji_aktywny):
+    if zakaz_migracji_aktywny:
         dzisiejsze_filie = [g["Filia"] for g in grafik if g["Lektor"] == lek["Lektor"] and g["Dzień"] == d]
         if dzisiejsze_filie and zad_filia not in dzisiejsze_filie:
             return False
@@ -554,7 +557,7 @@ if uploaded_file is not None:
     st.markdown("---")
     st.header("Krok 2: Automatyczne Układanie Grafiku")
     
-    zakaz_migracji = st.checkbox("🚫 Zakaz migracji między filiami w obrębie jednego dnia", value=True)
+    zakaz_migracji_ui = st.checkbox("🚫 Zakaz migracji między filiami w obrębie jednego dnia", value=True)
     
     if "wygenerowano" not in st.session_state:
         st.session_state.wygenerowano = False
@@ -630,128 +633,134 @@ if uploaded_file is not None:
                 else:
                     combos = []
 
-                znaleziono = False
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
-                for gap_pref in [10, 5]:
-                    if znaleziono: break
+                # ZAMKNIĘCIE W FUNKCJĘ ABY WYKONAĆ 2 FAZY ALGORYTMU
+                def proba_przypisania(strict_mode):
+                    gap_preferences = [10, 5] if strict_mode else [5, 0]
                     
-                    for combo in combos:
-                        if znaleziono: break
-                        
-                        def lek_score(lek):
-                            trk = tracker[lek["Lektor"]]
-                            score = 0
-                            
-                            hit_max = len(trk["grupy"]) >= lek["Limit_Max"]
-                            hit_min = len(trk["grupy"]) >= lek["Limit_Min"]
-                            
-                            if hit_max: score += 10000
-                            if hit_min: score += 100
-                            
-                            if lek["Pref"] and not hit_min:
-                                score -= 800
-                            
-                            for d in combo:
-                                dni_filie = trk["filie_dni"].get(d, set())
-                                if dni_filie:
-                                    if zad["Filia"] not in dni_filie: 
-                                        score += 2000  
-                                    else: 
-                                        score -= 60    
-                                        
-                            level_count = trk["poziomy"].count(zad["Poziom"])
-                            
-                            if lek["Pref"]:
-                                score -= (level_count * 50)
-                                if len(trk["poziomy"]) > 0 and level_count == 0:
-                                    score += 200 
-                            else:
-                                score -= (level_count * 15) 
-                            
-                            score += len(trk["grupy"]) 
-                            return score
-
-                        combo_valid_leks = sorted(valid_leks, key=lek_score)
-                        
-                        for lek in combo_valid_leks:
-                            if znaleziono: break
-                            
-                            zaplanowane_dni = []
-                            for d in combo:
-                                sloty = []
-                                for win_st, win_en in zad["Windows"][d]:
-                                    st_test = win_st + (5 - win_st % 5) if win_st % 5 != 0 else win_st
-                                    while st_test + zad["Czas"] <= win_en:
-                                        sloty.append(st_test)
-                                        st_test += 5
-                                        
-                                if waga == 0: sloty.sort()
-                                elif waga == 2: sloty.sort(reverse=True)
+                    for gap_pref in gap_preferences:
+                        for combo in combos:
+                            def lek_score(lek):
+                                trk = tracker[lek["Lektor"]]
+                                score = 0
                                 
-                                dzien_ok = False
-                                for st_m in sloty:
-                                    en_m = st_m + zad["Czas"]
-                                    
-                                    if check_lektor(lek, d, st_m, en_m, grafik, gap_pref, zad["Filia"], zakaz_migracji):
-                                        sala = check_sala(zad["Filia"], zad["Poziom"], d, st_m, en_m, grafik, sale_dane, gap_pref, lek["Lektor"])
-                                        
-                                        if sala:
-                                            op_przyp, op_odp = "", ""
-                                            moze_isc = True
-                                            
-                                            if zad["Typ"] == "Młodsza" and zad["Odbiór"]:
-                                                trasa = czas_tras.get(f"{zad['Odbiór']}_{zad['Filia']}", 15)
-                                                for op in opiekunki_dane:
-                                                    if op["Filia"] == zad["Filia"] and any(b_s <= (st_m - trasa) and b_e >= st_m for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(st_m-trasa, st_m, g["Start"], g["End"], 0) for g in grafik_op):
-                                                        op_przyp = op["Imię"]; break
-                                                for op in opiekunki_dane:
-                                                    if op["Filia"] == zad["Filia"] and any(b_s <= en_m and b_e >= (en_m + trasa) for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(en_m, en_m+trasa, g["Start"], g["End"], 0) for g in grafik_op):
-                                                        op_odp = op["Imię"]; break
-                                                
-                                                if not op_przyp or not op_odp: moze_isc = False
-                                            
-                                            if moze_isc:
-                                                op_str_format = ""
-                                                if op_przyp: 
-                                                    grafik_op.extend([
-                                                        {"Opiekunka": op_przyp, "Dzień": d, "Start": st_m-trasa, "End": st_m}, 
-                                                        {"Opiekunka": op_odp, "Dzień": d, "Start": en_m, "End": en_m+trasa}
-                                                    ])
-                                                    c_p = f"{mins_to_time(st_m-trasa)}-{mins_to_time(st_m)}"
-                                                    c_o = f"{mins_to_time(en_m)}-{mins_to_time(en_m+trasa)}"
-                                                    o_odb = zad["Odbiór"]
-                                                    op_str_format = f"\n🚶 Przyprowadza: {op_przyp} ({c_p}) z: {o_odb}\n🚶 Odprowadza: {op_odp} ({c_o}) do: {o_odb}"
-                                                
-                                                zaplanowane_dni.append({
-                                                    "Grupa": zad["Grupa"], "Poziom": zad["Poziom"], "Filia": zad["Filia"],
-                                                    "Dzień": d, "Start": st_m, "End": en_m, "Sala": sala, "Lektor": lek["Lektor"],
-                                                    "Op_Str": op_str_format
-                                                })
-                                                dzien_ok = True
-                                                break 
-                                if not dzien_ok: break 
+                                hit_max = len(trk["grupy"]) >= lek["Limit_Max"]
+                                hit_min = len(trk["grupy"]) >= lek["Limit_Min"]
                                 
-                            if len(zaplanowane_dni) == len(combo):
-                                grafik.extend(zaplanowane_dni)
-                                tracker[lek["Lektor"]]["grupy"].add(zad["Grupa"])
-                                tracker[lek["Lektor"]]["poziomy"].append(zad["Poziom"])
+                                if hit_max: score += 10000
+                                if hit_min: score += 100
                                 
-                                if zad["Filia"] not in filia_day_load: filia_day_load[zad["Filia"]] = {}
+                                if strict_mode and lek["Pref"] and not hit_min:
+                                    score -= 800
+                                
                                 for d in combo:
-                                    filia_day_load[zad["Filia"]][d] = filia_day_load[zad["Filia"]].get(d, 0) + 1
-                                    if d not in tracker[lek["Lektor"]]["filie_dni"]: tracker[lek["Lektor"]]["filie_dni"][d] = set()
-                                    tracker[lek["Lektor"]]["filie_dni"][d].add(zad["Filia"])
-                                znaleziono = True
-                                break 
+                                    dni_filie = trk["filie_dni"].get(d, set())
+                                    if dni_filie:
+                                        if zad["Filia"] not in dni_filie: 
+                                            score += 2000 if strict_mode else 500  
+                                        else: 
+                                            score -= 60    
+                                            
+                                level_count = trk["poziomy"].count(zad["Poziom"])
+                                
+                                if strict_mode and lek["Pref"]:
+                                    score -= (level_count * 50)
+                                    if len(trk["poziomy"]) > 0 and level_count == 0:
+                                        score += 30 # Drastycznie zmniejszona kara za nowy poziom
+                                else:
+                                    score -= (level_count * 15) 
+                                
+                                score += len(trk["grupy"]) 
+                                return score
+
+                            combo_valid_leks = sorted(valid_leks, key=lek_score)
+                            
+                            for lek in combo_valid_leks:
+                                zaplanowane_dni = []
+                                for d in combo:
+                                    sloty = []
+                                    for win_st, win_en in zad["Windows"][d]:
+                                        st_test = win_st + (5 - win_st % 5) if win_st % 5 != 0 else win_st
+                                        while st_test + zad["Czas"] <= win_en:
+                                            sloty.append(st_test)
+                                            st_test += 5
+                                            
+                                    if waga == 0: sloty.sort()
+                                    elif waga == 2: sloty.sort(reverse=True)
+                                    
+                                    dzien_ok = False
+                                    for st_m in sloty:
+                                        en_m = st_m + zad["Czas"]
+                                        
+                                        aktywna_blokada = zakaz_migracji_ui and strict_mode
+                                        if check_lektor(lek, d, st_m, en_m, grafik, gap_pref, zad["Filia"], aktywna_blokada):
+                                            sala = check_sala(zad["Filia"], zad["Poziom"], d, st_m, en_m, grafik, sale_dane, gap_pref, lek["Lektor"])
+                                            
+                                            if sala:
+                                                op_przyp, op_odp = "", ""
+                                                moze_isc = True
+                                                
+                                                if zad["Typ"] == "Młodsza" and zad["Odbiór"]:
+                                                    trasa = czas_tras.get(f"{zad['Odbiór']}_{zad['Filia']}", 15)
+                                                    for op in opiekunki_dane:
+                                                        if op["Filia"] == zad["Filia"] and any(b_s <= (st_m - trasa) and b_e >= st_m for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(st_m-trasa, st_m, g["Start"], g["End"], 0) for g in grafik_op):
+                                                            op_przyp = op["Imię"]; break
+                                                    for op in opiekunki_dane:
+                                                        if op["Filia"] == zad["Filia"] and any(b_s <= en_m and b_e >= (en_m + trasa) for (b_s, b_e) in op["Avail"][d]) and not any(g["Opiekunka"] == op["Imię"] and g["Dzień"] == d and is_overlap(en_m, en_m+trasa, g["Start"], g["End"], 0) for g in grafik_op):
+                                                            op_odp = op["Imię"]; break
+                                                    
+                                                    if not op_przyp or not op_odp: moze_isc = False
+                                                
+                                                if moze_isc:
+                                                    op_str_format = ""
+                                                    if op_przyp: 
+                                                        grafik_op.extend([
+                                                            {"Opiekunka": op_przyp, "Dzień": d, "Start": st_m-trasa, "End": st_m}, 
+                                                            {"Opiekunka": op_odp, "Dzień": d, "Start": en_m, "End": en_m+trasa}
+                                                        ])
+                                                        c_p = f"{mins_to_time(st_m-trasa)}-{mins_to_time(st_m)}"
+                                                        c_o = f"{mins_to_time(en_m)}-{mins_to_time(en_m+trasa)}"
+                                                        o_odb = zad["Odbiór"]
+                                                        op_str_format = f"\n🚶 Przyprowadza: {op_przyp} ({c_p}) z: {o_odb}\n🚶 Odprowadza: {op_odp} ({c_o}) do: {o_odb}"
+                                                    
+                                                    zaplanowane_dni.append({
+                                                        "Grupa": zad["Grupa"], "Poziom": zad["Poziom"], "Filia": zad["Filia"],
+                                                        "Dzień": d, "Start": st_m, "End": en_m, "Sala": sala, "Lektor": lek["Lektor"],
+                                                        "Op_Str": op_str_format
+                                                    })
+                                                    dzien_ok = True
+                                                    break 
+                                    if not dzien_ok: break 
+                                    
+                                if len(zaplanowane_dni) == len(combo):
+                                    grafik.extend(zaplanowane_dni)
+                                    tracker[lek["Lektor"]]["grupy"].add(zad["Grupa"])
+                                    tracker[lek["Lektor"]]["poziomy"].append(zad["Poziom"])
+                                    
+                                    if zad["Filia"] not in filia_day_load: filia_day_load[zad["Filia"]] = {}
+                                    for d in combo:
+                                        filia_day_load[zad["Filia"]][d] = filia_day_load[zad["Filia"]].get(d, 0) + 1
+                                        if d not in tracker[lek["Lektor"]]["filie_dni"]: tracker[lek["Lektor"]]["filie_dni"][d] = set()
+                                        tracker[lek["Lektor"]]["filie_dni"][d].add(zad["Filia"])
+                                    return True
+                    return False
+
+                # FAZA 1: Rygorystyczna (bez migracji i z przerwami)
+                znaleziono = proba_przypisania(strict_mode=True)
                 
+                # FAZA 2: Ratunkowa (zezwalaj na migrację, ignoruj limity VIP, zgódź się na 0 min przerwy)
                 if not znaleziono:
-                    nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Brak wspólnego zasobu (Lektor/Sala) z wymaganą przerwą"})
+                    znaleziono = proba_przypisania(strict_mode=False)
+
+                if not znaleziono:
+                    nieprzypisane.append({"Grupa": zad["Grupa"], "Filia": zad["Filia"], "Poziom": zad["Poziom"], "Problem": "Całkowity brak dyspozycyjności kadry/sal"})
 
             # === WYSZUKIWANIE OSTRZEŻEŃ ===
             warnings_zero = []
             warnings_min_grup = []
+            warnings_max_grup = []
             warnings_rozstrzal = []
             
             for lek in lektorzy_dane:
@@ -760,7 +769,9 @@ if uploaded_file is not None:
                 if przypisane == 0:
                     warnings_zero.append(f"Lektor **{lek['Lektor']}** nie otrzymał **żadnej** grupy (0).")
                 elif przypisane < lek["Limit_Min"]:
-                    warnings_min_grup.append(f"Lektor **{lek['Lektor']}** chciał uczyć {lek['Limit_Min']}-{lek['Limit_Max']} grup, a przypisano mu tylko **{przypisane}**.")
+                    warnings_min_grup.append(f"Lektor **{lek['Lektor']}** chciał uczyć minimum {lek['Limit_Min']} grup, a ma tylko **{przypisane}**.")
+                elif przypisane > lek["Limit_Max"]:
+                    warnings_max_grup.append(f"Lektor **{lek['Lektor']}** prosił o maks {lek['Limit_Max']} grup, ale przydzielono mu aż **{przypisane}** (wymuszone brakiem kadr).")
                 
                 unikalne_poziomy = set(tracker[lek["Lektor"]]["poziomy"])
                 if len(unikalne_poziomy) >= 4:
@@ -770,6 +781,7 @@ if uploaded_file is not None:
             st.session_state.nieprzypisane = nieprzypisane
             st.session_state.warnings_zero = warnings_zero
             st.session_state.warnings_min = warnings_min_grup
+            st.session_state.warnings_max = warnings_max_grup
             st.session_state.warnings_lvl = warnings_rozstrzal
             st.session_state.wygenerowano = True
 
@@ -786,15 +798,19 @@ if uploaded_file is not None:
         else:
             st.success("🎉 Sukces! Przypisano wszystkie grupy!")
             
-        if st.session_state.get("warnings_zero") or st.session_state.get("warnings_min") or st.session_state.get("warnings_lvl"):
+        if st.session_state.get("warnings_zero") or st.session_state.get("warnings_min") or st.session_state.get("warnings_lvl") or st.session_state.get("warnings_max"):
             with st.expander("⚠️ Raport ostrzeżeń: Niespełnione preferencje lektorów", expanded=True):
                 if st.session_state.warnings_zero:
                     st.markdown("#### 🔴 Całkowity brak przydziału (0 grup)")
                     for w in st.session_state.warnings_zero:
                         st.write(f"- {w}")
                 if st.session_state.warnings_min:
-                    st.markdown("#### 📉 Brak wymaganej liczby grup")
+                    st.markdown("#### 📉 Brak wymaganej liczby grup (Poniżej MIN)")
                     for w in st.session_state.warnings_min:
+                        st.write(f"- {w}")
+                if st.session_state.warnings_max:
+                    st.markdown("#### 📈 Przekroczenie etatu (Powyżej MAX)")
+                    for w in st.session_state.warnings_max:
                         st.write(f"- {w}")
                 if st.session_state.warnings_lvl:
                     st.markdown("#### 🔀 Duży rozstrzał poziomów")
