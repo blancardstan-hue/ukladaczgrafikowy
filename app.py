@@ -12,7 +12,7 @@ st.title("📅 Szkolny Układacz Grafików")
 st.write("Witaj w aplikacji! Pobierz szablon, wypełnij go, a następnie wgraj poniżej.")
 
 # ==========================================
-# 1. GENERATOR SZABLONU EXCEL (UREALNIONY)
+# 1. GENERATOR SZABLONU EXCEL (HIPERREALISTYCZNY)
 # ==========================================
 def generate_excel_template():
     output = BytesIO()
@@ -39,33 +39,41 @@ def generate_excel_template():
             "15:00-20:00", "16:00-21:00", "08:00-15:00"
         ]
         
-        regiony_filii = [
-            ["Komorów", "Michałowice"], ["Komorów", "Michałowice"], ["Komorów"], ["Michałowice"],
-            ["Ursus 1", "Ursus 2"], ["Ursus 1"], ["Ursus 2"],
-            ["Pruszków", "Nowa Wieś"], ["Pruszków"], ["Nowa Wieś"],
-            ["Komorów", "Pruszków"], ["Wszystkie"]
+        # Realistyczne klastry filii (75% to jedna filia, 20% to klastry sąsiedzkie, 5% to "wszystkie")
+        region_choices = [
+            ["Komorów"], ["Michałowice"], ["Pruszków"], ["Ursus 1"], ["Ursus 2"], ["Nowa Wieś"],
+            ["Komorów", "Michałowice"], ["Pruszków", "Nowa Wieś"], ["Ursus 1", "Ursus 2"],
+            ["Wszystkie"]
         ]
+        region_weights = [12, 12, 12, 15, 15, 9, 8, 6, 6, 5]
         
-        poziomy_opcje = [
-            "3-5 lat, 0, 1, 2, 3", 
-            "4, 5, 6, 7, 8, Masters", 
-            "0, 1, 2, 3, 4, 5, 6, 7, 8, Masters"
+        # Zróżnicowane kompetencje rocznikowe
+        poziom_choices = [
+            "0, 1, 2, 3",                                   # Tylko maluchy
+            "0, 1, 2, 3, 4, 5",                             # Młodsza połowa SP
+            "4, 5, 6, 7, 8",                                # Starsza połowa SP
+            "6, 7, 8, 9, 10, 11, 12",                       # Młodzież i dorośli (Masters = 9-12)
+            "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"      # Pełen przekrój weteranów
         ]
+        poziom_weights = [20, 20, 30, 15, 15]
         
         lektorzy_data = []
         for nazwa in wybrani:
-            # Przesunięcie wagi na osoby z 1-3 grupami (metodycy, liderzy itp.)
+            # Wagi dostosowane do realnych danych: dużo osób 1-3 grupy (metodycy itp.), mniej obciążonych
             min_gr = random.choices([1, 2, 3, 4, 5, 6, 7], weights=[15, 20, 20, 15, 15, 10, 5])[0]
             variance = random.choices([0, 1, 2], weights=[20, 60, 20])[0]
             max_gr = min_gr + variance
             if max_gr > 8: max_gr = 8
             
             pref = random.choices(["TAK", "NIE"], weights=[5, 95])[0]
-            przypisane_filie = random.choice(regiony_filii)
+            
+            przypisane_filie = random.choices(region_choices, weights=region_weights)[0]
             if "Wszystkie" in przypisane_filie:
                 filie_str = "Komorów, Michałowice, Pruszków, Ursus 1, Ursus 2, Nowa Wieś"
             else:
                 filie_str = ", ".join(przypisane_filie)
+                
+            poziomy_str = random.choices(poziom_choices, weights=poziom_weights)[0]
             
             lektorzy_data.append({
                 "Lektor": nazwa,
@@ -78,7 +86,7 @@ def generate_excel_template():
                 "Dostępność Czw": random.choice(godziny_lek_opcje),
                 "Dostępność Pt": random.choice(godziny_lek_opcje),
                 "Filie": filie_str,
-                "Poziomy": random.choice(poziomy_opcje)
+                "Poziomy": poziomy_str
             })
             
         pd.DataFrame(lektorzy_data).to_excel(writer, sheet_name="Lektorzy", index=False)
@@ -95,7 +103,7 @@ def generate_excel_template():
         sale_data = []
         for f, cnt in filie_sale.items():
             for i in range(1, cnt + 1):
-                prz = "3-5 lat, 0, 1, 2, 3" if i == 1 else "4, 5, 6, 7, 8, Masters" if i == 2 else "Wszystkie"
+                prz = "3-5 lat, 0, 1, 2, 3" if i == 1 else "4, 5, 6, 7, 8, 9, 10, 11, 12" if i == 2 else "Wszystkie"
                 sale_data.append({"Nazwa Sali": str(i), "Filia": f, "Przeznaczenie": prz})
         pd.DataFrame(sale_data).to_excel(writer, sheet_name="Sale", index=False)
         
@@ -668,7 +676,7 @@ if uploaded_file is not None:
                                 if strict_mode and lek["Pref"]:
                                     score -= (level_count * 50)
                                     if len(trk["poziomy"]) > 0 and level_count == 0:
-                                        score += 30 # Drastycznie zmniejszona kara za nowy poziom
+                                        score += 30 # Delikatna kara za nowy poziom, żeby uniknąć zatoru
                                 else:
                                     score -= (level_count * 15) 
                                 
