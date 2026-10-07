@@ -45,9 +45,12 @@ def generate_excel_template():
         
         lektorzy_data = []
         for nazwa in wybrani:
+            min_gr = random.randint(2, 4)
+            max_gr = min_gr + random.randint(1, 3)
             lektorzy_data.append({
                 "Lektor": nazwa,
-                "Zadeklarowana liczba grup": random.randint(2, 6),
+                "Min liczba grup": min_gr,
+                "Max liczba grup": max_gr,
                 "Dostępność Pon": random.choice(godziny_lek),
                 "Dostępność Wt": random.choice(godziny_lek),
                 "Dostępność Śr": random.choice(godziny_lek),
@@ -221,9 +224,9 @@ def check_sala(filia, poziom, d, st_m, en_m, grafik, sale_dane, gap):
     return None
 
 colors_pool = [
-    "#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", 
-    "#a0c4ff", "#bdb2ff", "#ffc6ff", "#fbb1bd", "#e2ece9",
-    "#ffcfd2", "#f1c0e8", "#cfbaf0", "#a3c4f3", "#90dbf4"
+    "#FFB3BA", "#FFDFBA", "#FFFFBA", "#BAFFC9", "#BAE1FF",
+    "#D5AAFF", "#FFB3E6", "#B3FFB3", "#FFC9DE", "#E0BBE4",
+    "#957DAD", "#D291BC", "#FEC8D8", "#FFDFD3", "#F5D0C5"
 ]
 
 def style_cell_with_cmap(val, cmap):
@@ -232,6 +235,9 @@ def style_cell_with_cmap(val, cmap):
     check_val = val_str.replace("~", "")
     for k, color in cmap.items():
         if f"({k})" in check_val or check_val.startswith(k):
+            if val_str.startswith("~"):
+                # Ukrywamy tekst malując czcionkę na kolor tła (zamiast transparent), co Excel przyjmuje z otwartymi ramionami
+                return f"background-color: {color}; color: {color};"
             return f"background-color: {color}; color: #000000; font-weight: bold;"
     return ""
 
@@ -340,6 +346,7 @@ def create_excel_download(grafiki_dict):
                     cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
                     if isinstance(cell.value, str):
                         chunks = cell.value.split(" | \n")
+                        # Całkowicie fizycznie czyścimy tekst powielonych komórek, by excel nie był zaśmiecony
                         visible_chunks = [c.replace("~", "") for c in chunks if not c.strip().startswith("~")]
                         if visible_chunks: cell.value = " | \n".join(visible_chunks)
                         else: cell.value = ""
@@ -361,8 +368,14 @@ uploaded_file = st.file_uploader("Wgraj plik Excel", type=["xlsx"])
 if uploaded_file is not None:
     xls = pd.ExcelFile(uploaded_file)
     df_lektorzy = pd.read_excel(xls, "Lektorzy")
-    if "Zadeklarowana liczba grup" not in df_lektorzy.columns:
-        df_lektorzy.insert(1, "Zadeklarowana liczba grup", 100)
+    
+    if "Min liczba grup" not in df_lektorzy.columns:
+        df_lektorzy.insert(1, "Min liczba grup", 0)
+    if "Max liczba grup" not in df_lektorzy.columns:
+        if "Zadeklarowana liczba grup" in df_lektorzy.columns:
+            df_lektorzy.insert(2, "Max liczba grup", df_lektorzy["Zadeklarowana liczba grup"])
+        else:
+            df_lektorzy.insert(2, "Max liczba grup", 100)
         
     df_sale = pd.read_excel(xls, "Sale")
     
@@ -471,10 +484,12 @@ if uploaded_file is not None:
                 l_filie = [f.strip() for f in str(r["Filie"]).split(",")] if pd.notna(r["Filie"]) else []
                 avail = {dni_short[i]: parse_availability(r.get(f"Dostępność {dni_short[i]}", "")) for i in range(5)}
                 
-                limit = int(r.get("Zadeklarowana liczba grup", 100))
+                lim_min = int(r.get("Min liczba grup", 0))
+                lim_max = int(r.get("Max liczba grup", 100))
+                
                 lektorzy_dane.append({
                     "Lektor": r["Lektor"], "Poziomy": l_poziomy, "Filie": l_filie, 
-                    "Avail": avail, "Limit": limit
+                    "Avail": avail, "Limit_Min": lim_min, "Limit_Max": lim_max
                 })
                 
             opiekunki_dane = []
@@ -512,7 +527,12 @@ if uploaded_file is not None:
                 znaleziono = False
                 
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
-                valid_leks.sort(key=lambda l: (len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit"], len(przypisane_grupy_lektora[l["Lektor"]])))
+                
+                valid_leks.sort(key=lambda l: (
+                    len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit_Max"],
+                    len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit_Min"],
+                    len(przypisane_grupy_lektora[l["Lektor"]])
+                ))
                 
                 waga = 0 if zad["Typ"] == "Młodsza" or zad["Poziom"] in ["0","1","2","3"] else 1 if zad["Poziom"] in ["4","5"] else 2
                 
@@ -603,7 +623,7 @@ if uploaded_file is not None:
             st.error(f"🔴 Konflikty grafiku! ({len(nieprzypisane)} grup wylądowało w poczekalni).")
             st.dataframe(pd.DataFrame(nieprzypisane), use_container_width=True)
         else:
-            st.success("🎉 Sukces! Przypisano wszystkie grupy zachowując limity lektorów i przerwy!")
+            st.success("🎉 Sukces! Przypisano wszystkie grupy zachowując zakresy (MIN/MAX) lektorów i przerwy!")
             
         st.subheader("Wizualizacja Grafiku")
         
@@ -625,8 +645,9 @@ if uploaded_file is not None:
                             uniq_leks = df_f["Lektor"].unique()
                             cmap = {lek: colors_pool[i % len(colors_pool)] for i, lek in enumerate(uniq_leks)}
                             
-                            try: styled = df_grid.style.map(lambda x: style_cell_with_cmap(x, cmap)).format(format_cell_text)
-                            except: styled = df_grid.style.applymap(lambda x: style_cell_with_cmap(x, cmap)).format(format_cell_text)
+                            # KLUCZOWA POPRAWKA: Przekazanie cmap jawnie w lambdzie chroni przed błędem w pętli
+                            try: styled = df_grid.style.map(lambda x, c=cmap: style_cell_with_cmap(x, c)).format(format_cell_text)
+                            except: styled = df_grid.style.applymap(lambda x, c=cmap: style_cell_with_cmap(x, c)).format(format_cell_text)
                             
                             grafiki_do_eksportu[f_nazwa] = styled
                             st.dataframe(styled, use_container_width=False, height=600)
@@ -645,8 +666,8 @@ if uploaded_file is not None:
                     uniq_g = df_lek["Grupa"].unique()
                     cmap_l = {g: colors_pool[i % len(colors_pool)] for i, g in enumerate(uniq_g)}
                     
-                    try: styled_lek = df_grid_lek.style.map(lambda x: style_cell_with_cmap(x, cmap_l)).format(format_cell_text)
-                    except: styled_lek = df_grid_lek.style.applymap(lambda x: style_cell_with_cmap(x, cmap_l)).format(format_cell_text)
+                    try: styled_lek = df_grid_lek.style.map(lambda x, c=cmap_l: style_cell_with_cmap(x, c)).format(format_cell_text)
+                    except: styled_lek = df_grid_lek.style.applymap(lambda x, c=cmap_l: style_cell_with_cmap(x, c)).format(format_cell_text)
                     
                     grafiki_do_eksportu[wybrany_lek] = styled_lek
                     st.dataframe(styled_lek, use_container_width=True, height=600)
