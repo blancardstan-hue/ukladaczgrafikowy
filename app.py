@@ -137,14 +137,23 @@ def generate_excel_template():
         
         starsi_data = []
         litery_full = ['A', 'B', 'C', 'D', 'E']
+        
+        # Generowanie SP (spadająca demografia)
         for f, szkoly in szkoly_config.items():
             for sz, oddzialy in szkoly.items():
                 for kl in range(1, 9):
                     uzyte_oddzialy = oddzialy - 1 if kl == 6 else oddzialy
                     for lit in litery_full[:uzyte_oddzialy]:
+                        if kl <= 3:
+                            chetni = random.randint(3, 9)
+                        elif kl <= 6:
+                            chetni = random.randint(2, 7)
+                        else:
+                            chetni = random.randint(0, 5) # Większość oddziałów się połączy w jedną grupę
+                            
                         starsi_data.append({
                             "Szkoła i Klasa": f"{sz} - Klasa {kl}{lit}", "Poziom": str(kl), 
-                            "Liczba Chętnych": random.randint(4, 10), "Czas trwania (min)": 90, 
+                            "Liczba Chętnych": chetni, "Czas trwania (min)": 90, 
                             "Docelowa Filia": f,
                             "Początek Szkoły Pon": random.choice(godziny_pocz), "Koniec Szkoły Pon": random.choice(godziny_kon),
                             "Początek Szkoły Wt": random.choice(godziny_pocz), "Koniec Szkoły Wt": random.choice(godziny_kon),
@@ -153,13 +162,16 @@ def generate_excel_template():
                             "Początek Szkoły Pt": random.choice(godziny_pocz), "Koniec Szkoły Pt": random.choice(godziny_kon)
                         })
                         
+        # Generowanie LO (ekstremalny spadek chętnych, "rodzynki")
         for f, szkoly in szkoly_lo.items():
             for sz in szkoly:
                 for kl in range(1, 5):
                     for lit in ['A', 'B']:
+                        # 85% szans na 0 chętnych w klasie, sporadycznie tworzy się grupa
+                        chetni = random.choices([0, 5, 8], weights=[85, 10, 5])[0]
                         starsi_data.append({
                             "Szkoła i Klasa": f"{sz} - Klasa {kl}{lit}", "Poziom": str(kl + 8), 
-                            "Liczba Chętnych": random.randint(4, 10), "Czas trwania (min)": 90, 
+                            "Liczba Chętnych": chetni, "Czas trwania (min)": 90, 
                             "Docelowa Filia": f,
                             "Początek Szkoły Pon": "08:00", "Koniec Szkoły Pon": "15:20",
                             "Początek Szkoły Wt": "08:00", "Koniec Szkoły Wt": "16:15",
