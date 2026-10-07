@@ -4,7 +4,7 @@ import random
 import itertools
 from io import BytesIO
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Border, Side
 
 st.set_page_config(page_title="Układacz Grafików", layout="wide")
 
@@ -236,7 +236,6 @@ def style_cell_with_cmap(val, cmap):
     for k, color in cmap.items():
         if f"({k})" in check_val or check_val.startswith(k):
             if val_str.startswith("~"):
-                # Ukrywamy tekst malując czcionkę na kolor tła (zamiast transparent), co Excel przyjmuje z otwartymi ramionami
                 return f"background-color: {color}; color: {color};"
             return f"background-color: {color}; color: #000000; font-weight: bold;"
     return ""
@@ -335,22 +334,63 @@ def generate_grid_for_lektor(df_lek):
 
 def create_excel_download(grafiki_dict):
     output = BytesIO()
+    thin = Side(style='thin', color='D3D3D3')
+    medium = Side(style='medium', color='000000')
+
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         for nazwa, styled_df in grafiki_dict.items():
             sheet_name = nazwa[:31] 
             styled_df.to_excel(writer, sheet_name=sheet_name)
             ws = writer.sheets[sheet_name]
             
+            df = styled_df.data if hasattr(styled_df, "data") else styled_df
+            
             for row in ws.iter_rows():
                 for cell in row:
                     cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
                     if isinstance(cell.value, str):
                         chunks = cell.value.split(" | \n")
-                        # Całkowicie fizycznie czyścimy tekst powielonych komórek, by excel nie był zaśmiecony
                         visible_chunks = [c.replace("~", "") for c in chunks if not c.strip().startswith("~")]
                         if visible_chunks: cell.value = " | \n".join(visible_chunks)
                         else: cell.value = ""
-            
+
+                    # Ustawienie domyślnej cienkiej ramki
+                    cell.border = Border(top=thin, left=thin, right=thin, bottom=thin)
+
+            # Pogrubienie ramki w kolumnie godzinowej
+            for row in ws.iter_rows(min_col=1, max_col=1):
+                for cell in row:
+                    b = cell.border
+                    new_top = medium if cell.row == 1 else b.top
+                    new_bottom = medium if cell.row == ws.max_row else b.bottom
+                    cell.border = Border(top=new_top, bottom=new_bottom, left=medium, right=medium)
+
+            # Wyznaczanie i pogrubianie granic między dniami tygodnia
+            if isinstance(df.columns, pd.MultiIndex):
+                for i in range(len(df.columns)):
+                    current_day = df.columns[i][0]
+                    is_first = (i == 0) or (df.columns[i-1][0] != current_day)
+                    is_last = (i == len(df.columns) - 1) or (df.columns[i+1][0] != current_day)
+                    excel_col = i + 2
+
+                    for row in ws.iter_rows(min_col=excel_col, max_col=excel_col):
+                        for cell in row:
+                            b = cell.border
+                            new_left = medium if is_first else b.left
+                            new_right = medium if is_last else b.right
+                            new_top = medium if cell.row == 1 else b.top
+                            new_bottom = medium if cell.row == ws.max_row else b.bottom
+                            cell.border = Border(top=new_top, bottom=new_bottom, left=new_left, right=new_right)
+            else:
+                for i in range(len(df.columns)):
+                    excel_col = i + 2
+                    for row in ws.iter_rows(min_col=excel_col, max_col=excel_col):
+                        for cell in row:
+                            b = cell.border
+                            new_top = medium if cell.row == 1 else b.top
+                            new_bottom = medium if cell.row == ws.max_row else b.bottom
+                            cell.border = Border(top=new_top, bottom=new_bottom, left=medium, right=medium)
+
             for i in range(1, ws.max_column + 1):
                 ws.column_dimensions[get_column_letter(i)].width = 25
                 
@@ -527,7 +567,6 @@ if uploaded_file is not None:
                 znaleziono = False
                 
                 valid_leks = [l for l in lektorzy_dane if zad["Poziom"] in l["Poziomy"] and (not l["Filie"] or zad["Filia"] in l["Filie"])]
-                
                 valid_leks.sort(key=lambda l: (
                     len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit_Max"],
                     len(przypisane_grupy_lektora[l["Lektor"]]) >= l["Limit_Min"],
@@ -645,7 +684,6 @@ if uploaded_file is not None:
                             uniq_leks = df_f["Lektor"].unique()
                             cmap = {lek: colors_pool[i % len(colors_pool)] for i, lek in enumerate(uniq_leks)}
                             
-                            # KLUCZOWA POPRAWKA: Przekazanie cmap jawnie w lambdzie chroni przed błędem w pętli
                             try: styled = df_grid.style.map(lambda x, c=cmap: style_cell_with_cmap(x, c)).format(format_cell_text)
                             except: styled = df_grid.style.applymap(lambda x, c=cmap: style_cell_with_cmap(x, c)).format(format_cell_text)
                             
