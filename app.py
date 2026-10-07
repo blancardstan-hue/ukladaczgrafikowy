@@ -9,97 +9,128 @@ from openpyxl.styles import Alignment, Border, Side
 st.set_page_config(page_title="Układacz Grafików", layout="wide")
 
 st.title("📅 Szkolny Układacz Grafików")
-st.write("Witaj w aplikacji! Pobierz szablon, wypełnij go, a następnie wgraj poniżej.")
+st.write("Witaj w aplikacji! Pobierz czysty szablon, wypełnij go swoimi danymi, a następnie wgraj poniżej.")
 
 # ==========================================
-# 1. GENERATOR SZABLONU EXCEL (HIPERREALISTYCZNY)
+# 1A. GENERATOR CZYSTEGO SZABLONU (DO PRACY)
 # ==========================================
-def generate_excel_template():
+def generate_clean_excel_template():
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         
-        imiona = [
-            "Anna", "Maria", "Katarzyna", "Małgorzata", "Agnieszka", "Ewa", "Magdalena", 
-            "Julia", "Zofia", "Hanna", "Jan", "Piotr", "Krzysztof", "Andrzej", "Tomasz", 
-            "Paweł", "Michał", "Marcin", "Jakub", "Adam", "Stanisław", "Tymoteusz", "Juliana"
-        ]
-        nazwiska = [
-            "Nowak", "Kowalski", "Wiśniewski", "Wójcik", "Kowalczyk", "Kamiński", "Lewandowski", 
-            "Zieliński", "Szymański", "Woźniak", "Dąbrowski", "Kozłowski", "Jankowski", "Mazur", 
-            "Kwiatkowski", "Krawczyk", "Kaczmarek", "Piotrowski", "Grabowski", "Zając", "Blancard"
-        ]
+        # Lektorzy
+        pd.DataFrame([{
+            "Lektor": "Jan Kowalski (PRZYKŁAD)",
+            "Preferencyjne traktowanie": "NIE",
+            "Min liczba grup": 4,
+            "Max liczba grup": 6,
+            "Dostępność Pon": "14:00-20:00",
+            "Dostępność Wt": "14:00-20:00",
+            "Dostępność Śr": "",
+            "Dostępność Czw": "15:00-19:00",
+            "Dostępność Pt": "",
+            "Filie": "Komorów, Michałowice",
+            "Poziomy": "4, 5, 6, 7, 8"
+        }]).to_excel(writer, sheet_name="Lektorzy", index=False)
+
+        # Sale
+        pd.DataFrame([{
+            "Nazwa Sali": "Sala 1 (PRZYKŁAD)",
+            "Filia": "Komorów",
+            "Przeznaczenie": "Wszystkie"
+        }]).to_excel(writer, sheet_name="Sale", index=False)
         
+        # Młodsze Dzieci
+        pd.DataFrame([{
+            "Nazwa Grupy": "Zerówka 1 (PRZYKŁAD)",
+            "Poziom": "0",
+            "Liczba Dzieci": 10,
+            "Czas trwania (min)": 60,
+            "Skąd Odbiór": "SP Komorów",
+            "Docelowa Filia": "Komorów",
+            "Początek Szkoły Pon": "08:00", "Koniec Szkoły Pon": "12:30",
+            "Początek Szkoły Wt": "08:00", "Koniec Szkoły Wt": "12:30",
+            "Początek Szkoły Śr": "", "Koniec Szkoły Śr": "",
+            "Początek Szkoły Czw": "", "Koniec Szkoły Czw": "",
+            "Początek Szkoły Pt": "", "Koniec Szkoły Pt": "",
+            "Liczba Spotkań": 2
+        }]).to_excel(writer, sheet_name="Młodsze Dzieci", index=False)
+        
+        # Starsi Uczniowie
+        pd.DataFrame([{
+            "Szkoła i Klasa": "SP Komorów - Klasa 4A (PRZYKŁAD)",
+            "Poziom": "4",
+            "Liczba Chętnych": 8,
+            "Czas trwania (min)": 90,
+            "Docelowa Filia": "Komorów",
+            "Początek Szkoły Pon": "08:00", "Koniec Szkoły Pon": "14:25",
+            "Początek Szkoły Wt": "08:00", "Koniec Szkoły Wt": "15:20",
+            "Początek Szkoły Śr": "", "Koniec Szkoły Śr": "",
+            "Początek Szkoły Czw": "", "Koniec Szkoły Czw": "",
+            "Początek Szkoły Pt": "", "Koniec Szkoły Pt": ""
+        }]).to_excel(writer, sheet_name="Starsi Uczniowie", index=False)
+        
+        # Opiekunki
+        pd.DataFrame([{
+            "Imię Opiekunki": "Marta (PRZYKŁAD)",
+            "Filia": "Komorów",
+            "Dostępność Pon": "12:00-16:00",
+            "Dostępność Wt": "12:00-16:00",
+            "Dostępność Śr": "",
+            "Dostępność Czw": "",
+            "Dostępność Pt": ""
+        }]).to_excel(writer, sheet_name="Opiekunki", index=False)
+        
+        # Trasy
+        pd.DataFrame([{
+            "Początek": "SP Komorów (PRZYKŁAD)",
+            "Koniec": "Komorów",
+            "Czas (min)": 15
+        }]).to_excel(writer, sheet_name="Trasy", index=False)
+
+        for sheetname in writer.sheets:
+            ws = writer.sheets[sheetname]
+            for i, col in enumerate(ws.columns, 1):
+                ws.column_dimensions[get_column_letter(i)].width = 25
+                
+    return output.getvalue()
+
+
+# ==========================================
+# 1B. GENERATOR SZABLONU TESTOWEGO (Z DANYMI)
+# ==========================================
+def generate_test_excel_template():
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        
+        imiona = ["Anna", "Maria", "Katarzyna", "Małgorzata", "Agnieszka", "Ewa", "Magdalena", "Julia", "Zofia", "Hanna", "Jan", "Piotr", "Krzysztof", "Andrzej", "Tomasz", "Paweł", "Michał", "Marcin", "Jakub", "Adam"]
+        nazwiska = ["Nowak", "Kowalski", "Wiśniewski", "Wójcik", "Kowalczyk", "Kamiński", "Lewandowski", "Zieliński", "Szymański", "Woźniak", "Dąbrowski", "Kozłowski", "Jankowski", "Mazur", "Kwiatkowski", "Krawczyk"]
         kombinacje = [f"{i} {n}" for i in imiona for n in nazwiska]
-        wybrani = random.sample(kombinacje, 72)
         
-        # Dominacja pełnych etatów i szerokich popołudni
-        godziny_lek_opcje = [
-            "08:00-21:00", "08:00-21:00", "08:00-21:00", "08:00-21:00", 
-            "12:00-20:00", "13:00-21:00", "14:00-21:00",
-            "15:00-20:00", "16:00-21:00", "08:00-15:00"
-        ]
+        # Ucięto do 40, żeby nie generować bezrobotnych w sztucznym środowisku
+        wybrani = random.sample(kombinacje, 40) 
         
-        # Realistyczne klastry filii (75% to jedna filia, 20% to klastry sąsiedzkie, 5% to "wszystkie")
-        region_choices = [
-            ["Komorów"], ["Michałowice"], ["Pruszków"], ["Ursus 1"], ["Ursus 2"], ["Nowa Wieś"],
-            ["Komorów", "Michałowice"], ["Pruszków", "Nowa Wieś"], ["Ursus 1", "Ursus 2"],
-            ["Wszystkie"]
-        ]
-        region_weights = [12, 12, 12, 15, 15, 9, 8, 6, 6, 5]
-        
-        # Zróżnicowane kompetencje rocznikowe
-        poziom_choices = [
-            "0, 1, 2, 3",                                   # Tylko maluchy
-            "0, 1, 2, 3, 4, 5",                             # Młodsza połowa SP
-            "4, 5, 6, 7, 8",                                # Starsza połowa SP
-            "6, 7, 8, 9, 10, 11, 12",                       # Młodzież i dorośli (Masters = 9-12)
-            "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"      # Pełen przekrój weteranów
-        ]
-        poziom_weights = [20, 20, 30, 15, 15]
+        godziny_lek_opcje = ["08:00-21:00", "12:00-20:00", "14:00-21:00", "15:00-20:00", "16:00-21:00"]
+        region_choices = [["Komorów"], ["Michałowice"], ["Pruszków"], ["Ursus 1"], ["Ursus 2"], ["Nowa Wieś"], ["Komorów", "Michałowice"], ["Wszystkie"]]
+        poziom_choices = ["0, 1, 2, 3", "4, 5, 6, 7, 8", "6, 7, 8, 9, 10, 11, 12", "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"]
         
         lektorzy_data = []
         for nazwa in wybrani:
-            # Wagi dostosowane do realnych danych: dużo osób 1-3 grupy (metodycy itp.), mniej obciążonych
-            min_gr = random.choices([1, 2, 3, 4, 5, 6, 7], weights=[15, 20, 20, 15, 15, 10, 5])[0]
-            variance = random.choices([0, 1, 2], weights=[20, 60, 20])[0]
-            max_gr = min_gr + variance
-            if max_gr > 8: max_gr = 8
-            
+            min_gr = random.randint(3, 6)
+            max_gr = min_gr + random.randint(0, 1)
             pref = random.choices(["TAK", "NIE"], weights=[5, 95])[0]
-            
-            przypisane_filie = random.choices(region_choices, weights=region_weights)[0]
-            if "Wszystkie" in przypisane_filie:
-                filie_str = "Komorów, Michałowice, Pruszków, Ursus 1, Ursus 2, Nowa Wieś"
-            else:
-                filie_str = ", ".join(przypisane_filie)
-                
-            poziomy_str = random.choices(poziom_choices, weights=poziom_weights)[0]
+            przypisane_filie = random.choice(region_choices)
+            filie_str = "Komorów, Michałowice, Pruszków, Ursus 1, Ursus 2, Nowa Wieś" if "Wszystkie" in przypisane_filie else ", ".join(przypisane_filie)
             
             lektorzy_data.append({
-                "Lektor": nazwa,
-                "Preferencyjne traktowanie": pref,
-                "Min liczba grup": min_gr,
-                "Max liczba grup": max_gr,
-                "Dostępność Pon": random.choice(godziny_lek_opcje),
-                "Dostępność Wt": random.choice(godziny_lek_opcje),
-                "Dostępność Śr": random.choice(godziny_lek_opcje),
-                "Dostępność Czw": random.choice(godziny_lek_opcje),
-                "Dostępność Pt": random.choice(godziny_lek_opcje),
-                "Filie": filie_str,
-                "Poziomy": poziomy_str
+                "Lektor": nazwa, "Preferencyjne traktowanie": pref, "Min liczba grup": min_gr, "Max liczba grup": max_gr,
+                "Dostępność Pon": random.choice(godziny_lek_opcje), "Dostępność Wt": random.choice(godziny_lek_opcje),
+                "Dostępność Śr": random.choice(godziny_lek_opcje), "Dostępność Czw": random.choice(godziny_lek_opcje),
+                "Dostępność Pt": random.choice(godziny_lek_opcje), "Filie": filie_str, "Poziomy": random.choice(poziom_choices)
             })
-            
         pd.DataFrame(lektorzy_data).to_excel(writer, sheet_name="Lektorzy", index=False)
         
-        filie_sale = {
-            "Nowa Wieś": 2,
-            "Komorów": 5,
-            "Michałowice": 5,
-            "Pruszków": 5,
-            "Ursus 1": 7,
-            "Ursus 2": 7
-        }
-        
+        filie_sale = {"Nowa Wieś": 2, "Komorów": 5, "Michałowice": 5, "Pruszków": 5, "Ursus 1": 7, "Ursus 2": 7}
         sale_data = []
         for f, cnt in filie_sale.items():
             for i in range(1, cnt + 1):
@@ -107,99 +138,31 @@ def generate_excel_template():
                 sale_data.append({"Nazwa Sali": str(i), "Filia": f, "Przeznaczenie": prz})
         pd.DataFrame(sale_data).to_excel(writer, sheet_name="Sale", index=False)
         
-        szkoly_config = {
-            "Nowa Wieś": {"SP Nowa Wieś": 2}, 
-            "Komorów": {"SP Komorów": 4},     
-            "Michałowice": {"SP Michałowice": 4},
-            "Pruszków": {"SP nr 1 Pruszków": 4, "SP nr 2 Pruszków": 3},
-            "Ursus 1": {"SP Ursus A": 5},     
-            "Ursus 2": {"SP Ursus B": 5}
-        }
-        szkoly_lo = {"Komorów": ["LO Komorów"], "Pruszków": ["LO Pruszków"], "Nowa Wieś": ["LO Nowa Wieś"]}
-        godziny_pocz = ["08:00", "08:55", "09:50"]
-        godziny_kon = ["12:30", "13:30", "14:25", "15:20", "16:15"]
+        szkoly_config = {"Nowa Wieś": {"SP Nowa Wieś": 2}, "Komorów": {"SP Komorów": 4}, "Michałowice": {"SP Michałowice": 4}, "Pruszków": {"SP nr 1": 4}, "Ursus 1": {"SP Ursus A": 5}, "Ursus 2": {"SP Ursus B": 5}}
+        godziny_pocz = ["08:00", "08:55"]
+        godziny_kon = ["12:30", "13:30", "14:25"]
 
         mlodsze_data = []
         for f, szkoly in szkoly_config.items():
-            for sz, oddzialy in szkoly.items():
-                mlodsze_data.append({
-                    "Nazwa Grupy": f"Zerówka {sz}", "Poziom": "0", 
-                    "Liczba Dzieci": random.randint(8, 14),
-                    "Czas trwania (min)": 60, "Skąd Odbiór": sz, "Docelowa Filia": f,
-                    "Początek Szkoły Pon": "08:00", "Koniec Szkoły Pon": "12:30",
-                    "Początek Szkoły Wt": "08:00", "Koniec Szkoły Wt": "12:30",
-                    "Początek Szkoły Śr": "08:00", "Koniec Szkoły Śr": "12:30",
-                    "Początek Szkoły Czw": "08:00", "Koniec Szkoły Czw": "13:30",
-                    "Początek Szkoły Pt": "08:00", "Koniec Szkoły Pt": "12:30",
-                    "Liczba Spotkań": 2
-                })
+            for sz in szkoly.keys():
+                mlodsze_data.append({"Nazwa Grupy": f"Zerówka {sz}", "Poziom": "0", "Liczba Dzieci": 10, "Czas trwania (min)": 60, "Skąd Odbiór": sz, "Docelowa Filia": f, "Początek Szkoły Pon": "08:00", "Koniec Szkoły Pon": "12:30", "Początek Szkoły Wt": "08:00", "Koniec Szkoły Wt": "12:30", "Początek Szkoły Śr": "08:00", "Koniec Szkoły Śr": "12:30", "Początek Szkoły Czw": "08:00", "Koniec Szkoły Czw": "13:30", "Początek Szkoły Pt": "08:00", "Koniec Szkoły Pt": "12:30", "Liczba Spotkań": 2})
         pd.DataFrame(mlodsze_data).to_excel(writer, sheet_name="Młodsze Dzieci", index=False)
         
         starsi_data = []
-        litery_full = ['A', 'B', 'C', 'D', 'E']
-        
-        # Generowanie SP (spadająca demografia)
         for f, szkoly in szkoly_config.items():
             for sz, oddzialy in szkoly.items():
                 for kl in range(1, 9):
-                    uzyte_oddzialy = oddzialy - 1 if kl == 6 else oddzialy
-                    for lit in litery_full[:uzyte_oddzialy]:
-                        if kl <= 3:
-                            chetni = random.randint(3, 9)
-                        elif kl <= 6:
-                            chetni = random.randint(2, 7)
-                        else:
-                            chetni = random.randint(0, 5) # Większość oddziałów się połączy w jedną grupę
-                            
-                        starsi_data.append({
-                            "Szkoła i Klasa": f"{sz} - Klasa {kl}{lit}", "Poziom": str(kl), 
-                            "Liczba Chętnych": chetni, "Czas trwania (min)": 90, 
-                            "Docelowa Filia": f,
-                            "Początek Szkoły Pon": random.choice(godziny_pocz), "Koniec Szkoły Pon": random.choice(godziny_kon),
-                            "Początek Szkoły Wt": random.choice(godziny_pocz), "Koniec Szkoły Wt": random.choice(godziny_kon),
-                            "Początek Szkoły Śr": random.choice(godziny_pocz), "Koniec Szkoły Śr": random.choice(godziny_kon),
-                            "Początek Szkoły Czw": random.choice(godziny_pocz), "Koniec Szkoły Czw": random.choice(godziny_kon),
-                            "Początek Szkoły Pt": random.choice(godziny_pocz), "Koniec Szkoły Pt": random.choice(godziny_kon)
-                        })
-                        
-        # Generowanie LO (ekstremalny spadek chętnych, "rodzynki")
-        for f, szkoly in szkoly_lo.items():
-            for sz in szkoly:
-                for kl in range(1, 5):
-                    for lit in ['A', 'B']:
-                        # 85% szans na 0 chętnych w klasie, sporadycznie tworzy się grupa
-                        chetni = random.choices([0, 5, 8], weights=[85, 10, 5])[0]
-                        starsi_data.append({
-                            "Szkoła i Klasa": f"{sz} - Klasa {kl}{lit}", "Poziom": str(kl + 8), 
-                            "Liczba Chętnych": chetni, "Czas trwania (min)": 90, 
-                            "Docelowa Filia": f,
-                            "Początek Szkoły Pon": "08:00", "Koniec Szkoły Pon": "15:20",
-                            "Początek Szkoły Wt": "08:00", "Koniec Szkoły Wt": "16:15",
-                            "Początek Szkoły Śr": "08:00", "Koniec Szkoły Śr": "14:25",
-                            "Początek Szkoły Czw": "08:00", "Koniec Szkoły Czw": "15:20",
-                            "Początek Szkoły Pt": "08:00", "Koniec Szkoły Pt": "13:30"
-                        })
+                    for lit in ['A', 'B'][:oddzialy]:
+                        starsi_data.append({"Szkoła i Klasa": f"{sz} - Klasa {kl}{lit}", "Poziom": str(kl), "Liczba Chętnych": random.randint(2, 8), "Czas trwania (min)": 90, "Docelowa Filia": f, "Początek Szkoły Pon": random.choice(godziny_pocz), "Koniec Szkoły Pon": random.choice(godziny_kon), "Początek Szkoły Wt": random.choice(godziny_pocz), "Koniec Szkoły Wt": random.choice(godziny_kon), "Początek Szkoły Śr": random.choice(godziny_pocz), "Koniec Szkoły Śr": random.choice(godziny_kon), "Początek Szkoły Czw": random.choice(godziny_pocz), "Koniec Szkoły Czw": random.choice(godziny_kon), "Początek Szkoły Pt": random.choice(godziny_pocz), "Koniec Szkoły Pt": random.choice(godziny_kon)})
         pd.DataFrame(starsi_data).to_excel(writer, sheet_name="Starsi Uczniowie", index=False)
         
-        pd.DataFrame({
-            "Imię Opiekunki": ["Marta", "Krystyna", "Zofia", "Ewa", "Agnieszka", "Magda", "Joanna", "Monika"],
-            "Filia": ["Komorów", "Michałowice", "Pruszków", "Ursus 1", "Ursus 2", "Nowa Wieś", "Ursus 1", "Komorów"],
-            "Dostępność Pon": ["12:00-18:00"]*8, "Dostępność Wt": ["12:00-18:00"]*8,
-            "Dostępność Śr": ["12:00-18:00"]*8, "Dostępność Czw": ["12:00-18:00"]*8,
-            "Dostępność Pt": ["12:00-18:00"]*8
-        }).to_excel(writer, sheet_name="Opiekunki", index=False)
-        
-        trasy_data = []
-        for f, szkoly in szkoly_config.items():
-            for sz in szkoly.keys(): 
-                trasy_data.append({"Początek": sz, "Koniec": f, "Czas (min)": random.choice([10, 15, 20])})
-        pd.DataFrame(trasy_data).to_excel(writer, sheet_name="Trasy", index=False)
+        pd.DataFrame({"Imię Opiekunki": ["Marta", "Krystyna"], "Filia": ["Komorów", "Michałowice"], "Dostępność Pon": ["12:00-18:00"]*2, "Dostępność Wt": ["12:00-18:00"]*2, "Dostępność Śr": ["12:00-18:00"]*2, "Dostępność Czw": ["12:00-18:00"]*2, "Dostępność Pt": ["12:00-18:00"]*2}).to_excel(writer, sheet_name="Opiekunki", index=False)
+        pd.DataFrame({"Początek": ["SP Komorów", "SP Michałowice"], "Koniec": ["Komorów", "Michałowice"], "Czas (min)": [15, 15]}).to_excel(writer, sheet_name="Trasy", index=False)
 
         for sheetname in writer.sheets:
             ws = writer.sheets[sheetname]
             for i, col in enumerate(ws.columns, 1):
-                max_len = max([len(str(c.value)) for c in col if c.value] + [0])
-                ws.column_dimensions[get_column_letter(i)].width = max_len + 3
+                ws.column_dimensions[get_column_letter(i)].width = 20
                 
     return output.getvalue()
 
@@ -468,7 +431,11 @@ def create_excel_download(grafiki_dict):
 # INTERFEJS GŁÓWNY
 # ==========================================
 st.subheader("1. Pobierz szablon")
-st.download_button("📥 Pobierz układacz (Excel)", data=generate_excel_template(), file_name="ukladacz.xlsx")
+col1, col2 = st.columns(2)
+with col1:
+    st.download_button("📥 Pobierz CZYSTY szablon (do pracy)", data=generate_clean_excel_template(), file_name="czysty_szablon_KUM.xlsx", type="primary")
+with col2:
+    st.download_button("🧪 Pobierz szablon z danymi (do testów)", data=generate_test_excel_template(), file_name="testowy_szablon.xlsx")
 
 st.subheader("2. Wgraj uzupełniony plik")
 uploaded_file = st.file_uploader("Wgraj plik Excel", type=["xlsx"])
@@ -688,7 +655,7 @@ if uploaded_file is not None:
                                 if strict_mode and lek["Pref"]:
                                     score -= (level_count * 50)
                                     if len(trk["poziomy"]) > 0 and level_count == 0:
-                                        score += 30 # Delikatna kara za nowy poziom, żeby uniknąć zatoru
+                                        score += 30 
                                 else:
                                     score -= (level_count * 15) 
                                 
